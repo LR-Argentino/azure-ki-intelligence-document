@@ -6,58 +6,26 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="spinner-container" [class.overlay]="overlay">
-      <div class="spinner" [style.width.px]="size" [style.height.px]="size">
-        <div class="spinner-circle"></div>
+    <div class="flex flex-col items-center justify-center p-8"
+         [class.fixed]="overlay"
+         [class.inset-0]="overlay"
+         [class.bg-white]="overlay"
+         [class.bg-opacity-90]="overlay"
+         [class.z-50]="overlay">
+      
+      <!-- Spinner -->
+      <div class="relative" [style.width.px]="size" [style.height.px]="size">
+        <div class="absolute inset-0 border-4 border-gray-200 rounded-full"></div>
+        <div class="absolute inset-0 border-4 border-transparent border-t-primary-600 rounded-full animate-spin"></div>
       </div>
-      <p *ngIf="message" class="spinner-message">{{ message }}</p>
+      
+      <!-- Message -->
+      <p *ngIf="message" class="mt-4 text-sm text-gray-600 text-center max-w-xs">
+        {{ message }}
+      </p>
     </div>
   `,
-  styles: [`
-    .spinner-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .spinner-container.overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(255, 255, 255, 0.8);
-      z-index: 9999;
-    }
-
-    .spinner {
-      position: relative;
-      display: inline-block;
-    }
-
-    .spinner-circle {
-      width: 100%;
-      height: 100%;
-      border: 3px solid #f3f3f3;
-      border-top: 3px solid #007acc;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    .spinner-message {
-      margin-top: 16px;
-      color: #666;
-      font-size: 14px;
-      text-align: center;
-    }
-  `]
+  styles: []
 })
 export class LoadingSpinnerComponent {
   @Input() size: number = 40;

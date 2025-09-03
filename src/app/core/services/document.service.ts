@@ -241,7 +241,7 @@ export class DocumentService implements IDocumentService {
    * @throws DocumentServiceError if validation fails
    */
   private validateFile(file: File): void {
-    const maxSize = 50 * 1024 * 1024; // 50MB
+    const maxSize = 10 * 1024 * 1024; // 10MB
     const allowedTypes = ['application/pdf'];
     const allowedExtensions = ['.pdf'];
 
@@ -282,7 +282,7 @@ export class DocumentService implements IDocumentService {
     if (file.size > maxSize) {
       throw new DocumentServiceError(
         DocumentErrorCode.FILE_TOO_LARGE,
-        `File size (${Math.round(file.size / 1024 / 1024)}MB) exceeds maximum allowed size (50MB).`,
+        `File size (${Math.round(file.size / 1024 / 1024)}MB) exceeds maximum allowed size (10MB).`,
         undefined,
         { fileName: file.name, fileSize: file.size, maxSize }
       );

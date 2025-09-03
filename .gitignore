@@ -41,4 +41,12 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Environment files with sensitive data
+/src/environments/environment.local.ts
+/src/environments/*.local.ts
+.env
+.env.local
+.env.*.local
+
+# Test files
 ./public/invoice.pdf
