@@ -1,12 +1,19 @@
 import { Injectable, signal } from '@angular/core';
 import { Observable, from, of, throwError } from 'rxjs';
-import { map, catchError, tap } from 'rxjs/operators';
+import { map, catchError, tap, retry, delay } from 'rxjs/operators';
 import { Document, ProcessingStatus, DocumentType } from '../models/document.model';
+import { IDocumentService } from '../interfaces/document-service.interface';
+import { DocumentServiceError, DocumentErrorCode, ErrorHandler } from '../errors/service-errors';
+import { LoggingService } from './logging.service';
 
+/**
+ * Service for managing document operations with Signal-based state management
+ * Implements comprehensive error handling and logging
+ */
 @Injectable({
   providedIn: 'root'
 })
-export class DocumentService {
+export class DocumentService implements IDocumentService {
   private documents = signal<Document[]>([]);
   private currentDocument = signal<Document | null>(null);
 
@@ -14,64 +21,150 @@ export class DocumentService {
   readonly documentsSignal = this.documents.asReadonly();
   readonly currentDocumentSignal = this.currentDocument.asReadonly();
 
+  constructor(private loggingService: LoggingService) {
+    this.loggingService.info('DocumentService initialized', undefined, 'DocumentService');
+  }
+
   /**
-   * Upload and process document
+   * Upload and process document with comprehensive error handling and retry logic
+   * @param file The file to upload and process
+   * @returns Observable of the processed document
    */
   uploadDocument(file: File): Observable<Document> {
-    // Validate file
-    const validationError = this.validateFile(file);
-    if (validationError) {
-      return throwError(() => new Error(validationError));
+    this.loggingService.info(`Starting document upload: ${file.name}`, { size: file.size }, 'DocumentService');
+
+    try {
+      // Validate file
+      this.validateFile(file);
+
+      const document: Document = {
+        id: this.generateId(),
+        name: file.name,
+        type: this.detectDocumentType(file.name),
+        uploadDate: new Date(),
+        size: file.size,
+        status: ProcessingStatus.UPLOADING
+      };
+
+      // Add to documents list
+      this.documents.update(docs => [...docs, document]);
+      this.loggingService.info(`Document added to collection: ${document.id}`, document, 'DocumentService');
+
+      // Process file with retry logic
+      return from(this.processFile(file, document)).pipe(
+        retry({
+          count: 3,
+          delay: (error, retryCount) => {
+            this.loggingService.warn(`Upload attempt ${retryCount} failed, retrying...`, error, 'DocumentService');
+            return of(null).pipe(delay(1000 * retryCount));
+          }
+        }),
+        tap(processedDoc => {
+          this.updateDocument(processedDoc);
+          this.loggingService.info(`Document processed successfully: ${processedDoc.id}`, processedDoc, 'DocumentService');
+        }),
+        catchError(error => {
+          document.status = ProcessingStatus.FAILED;
+          this.updateDocument(document);
+          
+          const serviceError = new DocumentServiceError(
+            DocumentErrorCode.PROCESSING_FAILED,
+            `Failed to process document: ${file.name}`,
+            error,
+            { documentId: document.id, fileName: file.name }
+          );
+          
+          this.loggingService.error('Document processing failed', serviceError, 'DocumentService');
+          return throwError(() => serviceError);
+        })
+      );
+    } catch (error) {
+      const serviceError = ErrorHandler.createError(error, { fileName: file.name });
+      this.loggingService.error('Document upload validation failed', serviceError, 'DocumentService');
+      return throwError(() => serviceError);
     }
-
-    const document: Document = {
-      id: this.generateId(),
-      name: file.name,
-      type: this.detectDocumentType(file.name),
-      uploadDate: new Date(),
-      size: file.size,
-      status: ProcessingStatus.UPLOADING
-    };
-
-    // Add to documents list
-    this.documents.update(docs => [...docs, document]);
-
-    // Simulate file upload and processing
-    return from(this.processFile(file, document)).pipe(
-      tap(processedDoc => {
-        this.updateDocument(processedDoc);
-      }),
-      catchError(error => {
-        document.status = ProcessingStatus.FAILED;
-        this.updateDocument(document);
-        return throwError(() => error);
-      })
-    );
   }
 
   /**
    * Get document by ID
    */
   getDocumentById(id: string): Observable<Document> {
-    const document = this.documents().find(doc => doc.id === id);
-    if (document) {
-      return of(document);
+    try {
+      if (!id || id.trim() === '') {
+        throw new DocumentServiceError(
+          DocumentErrorCode.INVALID_DOCUMENT_ID,
+          'Document ID cannot be empty',
+          undefined,
+          { documentId: id }
+        );
+      }
+
+      const document = this.documents().find(doc => doc.id === id);
+      if (document) {
+        return of(document);
+      }
+      
+      throw new DocumentServiceError(
+        DocumentErrorCode.DOCUMENT_NOT_FOUND,
+        `Document with id ${id} not found`,
+        undefined,
+        { documentId: id }
+      );
+    } catch (error) {
+      if (error instanceof DocumentServiceError) {
+        this.loggingService.error('Document retrieval failed', error, 'DocumentService');
+        return throwError(() => error);
+      }
+      
+      const serviceError = ErrorHandler.createError(error, { documentId: id });
+      this.loggingService.error('Document retrieval failed', serviceError, 'DocumentService');
+      return throwError(() => serviceError);
     }
-    return throwError(() => new Error(`Document with id ${id} not found`));
   }
 
   /**
    * Delete document
    */
   deleteDocument(id: string): Observable<void> {
-    this.documents.update(docs => docs.filter(doc => doc.id !== id));
-    
-    // Clear current document if it's the one being deleted
-    if (this.currentDocument()?.id === id) {
-      this.currentDocument.set(null);
-    }
+    try {
+      if (!id || id.trim() === '') {
+        throw new DocumentServiceError(
+          DocumentErrorCode.INVALID_DOCUMENT_ID,
+          'Document ID cannot be empty',
+          undefined,
+          { documentId: id }
+        );
+      }
 
-    return of(void 0);
+      const document = this.documents().find(doc => doc.id === id);
+      if (!document) {
+        throw new DocumentServiceError(
+          DocumentErrorCode.DOCUMENT_NOT_FOUND,
+          `Document with id ${id} not found`,
+          undefined,
+          { documentId: id }
+        );
+      }
+
+      this.documents.update(docs => docs.filter(doc => doc.id !== id));
+      
+      // Clear current document if it's the one being deleted
+      if (this.currentDocument()?.id === id) {
+        this.currentDocument.set(null);
+      }
+
+      this.loggingService.info(`Document deleted: ${id}`, undefined, 'DocumentService');
+      return of(void 0);
+    } catch (error) {
+      if (error instanceof DocumentServiceError) {
+        this.loggingService.error('Document deletion failed', error, 'DocumentService');
+        return throwError(() => error);
+      }
+      
+      const serviceError = ErrorHandler.createError(error, { documentId: id });
+      this.loggingService.error('Document deletion failed', serviceError, 'DocumentService');
+      return throwError(() => serviceError);
+    }
   }
 
   /**
@@ -85,22 +178,125 @@ export class DocumentService {
    * Get all documents
    */
   getAllDocuments(): Observable<Document[]> {
+    this.loggingService.debug('Getting all documents', { count: this.documents().length }, 'DocumentService');
     return of(this.documents());
   }
 
-  private validateFile(file: File): string | null {
+  /**
+   * Update an existing document
+   * @param document The document to update
+   * @returns Observable of the updated document
+   */
+  updateDocument(document: Document): Observable<Document> {
+    try {
+      if (!document.id) {
+        throw new DocumentServiceError(
+          DocumentErrorCode.INVALID_DOCUMENT_ID,
+          'Document ID is required for update',
+          undefined,
+          { document }
+        );
+      }
+
+      this.documents.update(docs => 
+        docs.map(doc => doc.id === document.id ? { ...document } : doc)
+      );
+
+      // Update current document if it's the same
+      if (this.currentDocument()?.id === document.id) {
+        this.currentDocument.set({ ...document });
+      }
+
+      this.loggingService.info(`Document updated: ${document.id}`, document, 'DocumentService');
+      return of(document);
+    } catch (error) {
+      const serviceError = ErrorHandler.createError(error, { documentId: document.id });
+      this.loggingService.error('Document update failed', serviceError, 'DocumentService');
+      return throwError(() => serviceError);
+    }
+  }
+
+  /**
+   * Clear all documents
+   * @returns Observable that completes when clearing is done
+   */
+  clearAllDocuments(): Observable<void> {
+    try {
+      const count = this.documents().length;
+      this.documents.set([]);
+      this.currentDocument.set(null);
+      
+      this.loggingService.info(`Cleared ${count} documents`, undefined, 'DocumentService');
+      return of(void 0);
+    } catch (error) {
+      const serviceError = ErrorHandler.createError(error);
+      this.loggingService.error('Failed to clear documents', serviceError, 'DocumentService');
+      return throwError(() => serviceError);
+    }
+  }
+
+  /**
+   * Validate uploaded file with comprehensive checks
+   * @param file The file to validate
+   * @throws DocumentServiceError if validation fails
+   */
+  private validateFile(file: File): void {
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    const allowedTypes = ['application/pdf'];
+    const allowedExtensions = ['.pdf'];
+
+    if (!file) {
+      throw new DocumentServiceError(
+        DocumentErrorCode.INVALID_FILE_TYPE,
+        'No file provided',
+        undefined,
+        { fileName: 'null' }
+      );
+    }
+
     // Check file type
-    if (file.type !== 'application/pdf') {
-      return 'Only PDF files are supported';
+    if (!allowedTypes.includes(file.type)) {
+      throw new DocumentServiceError(
+        DocumentErrorCode.INVALID_FILE_TYPE,
+        `Invalid file type: ${file.type}. Only PDF files are allowed.`,
+        undefined,
+        { fileName: file.name, fileType: file.type }
+      );
     }
 
-    // Check file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024;
+    // Check file extension as backup
+    const hasValidExtension = allowedExtensions.some(ext => 
+      file.name.toLowerCase().endsWith(ext)
+    );
+    
+    if (!hasValidExtension) {
+      throw new DocumentServiceError(
+        DocumentErrorCode.INVALID_FILE_TYPE,
+        `Invalid file extension. Only PDF files are allowed.`,
+        undefined,
+        { fileName: file.name }
+      );
+    }
+
+    // Check file size
     if (file.size > maxSize) {
-      return 'File size must be less than 50MB';
+      throw new DocumentServiceError(
+        DocumentErrorCode.FILE_TOO_LARGE,
+        `File size (${Math.round(file.size / 1024 / 1024)}MB) exceeds maximum allowed size (50MB).`,
+        undefined,
+        { fileName: file.name, fileSize: file.size, maxSize }
+      );
     }
 
-    return null;
+    // Check if file is empty
+    if (file.size === 0) {
+      throw new DocumentServiceError(
+        DocumentErrorCode.INVALID_FILE_TYPE,
+        'File is empty',
+        undefined,
+        { fileName: file.name }
+      );
+    }
   }
 
   private detectDocumentType(fileName: string): DocumentType {
@@ -134,11 +330,7 @@ export class DocumentService {
     return document;
   }
 
-  private updateDocument(updatedDocument: Document): void {
-    this.documents.update(docs => 
-      docs.map(doc => doc.id === updatedDocument.id ? updatedDocument : doc)
-    );
-  }
+
 
   private generateId(): string {
     return Math.random().toString(36).substr(2, 9);
