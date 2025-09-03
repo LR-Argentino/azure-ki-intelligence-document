@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -293,6 +293,10 @@ export class UploadProgressComponent {
   @Input() showDetails = true;
   @Input() showActions = true;
 
+  @Output() cancel = new EventEmitter<void>();
+  @Output() continue = new EventEmitter<void>();
+  @Output() retry = new EventEmitter<void>();
+
   get statusText(): string {
     switch (this.status) {
       case 'uploading':
@@ -317,17 +321,14 @@ export class UploadProgressComponent {
   }
 
   onCancel(): void {
-    // Emit cancel event
-    console.log('Upload cancelled');
+    this.cancel.emit();
   }
 
   onContinue(): void {
-    // Emit continue event
-    console.log('Continue clicked');
+    this.continue.emit();
   }
 
   onRetry(): void {
-    // Emit retry event
-    console.log('Retry clicked');
+    this.retry.emit();
   }
 }

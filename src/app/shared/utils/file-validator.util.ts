@@ -1,7 +1,7 @@
 export class FileValidatorUtil {
   
   static readonly ALLOWED_TYPES = ['application/pdf'];
-  static readonly MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  static readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   static readonly MIN_FILE_SIZE = 1024; // 1KB
 
   /**

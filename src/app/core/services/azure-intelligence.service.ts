@@ -2,18 +2,19 @@ import { Injectable } from '@angular/core';
 import { Observable, from, throwError, of } from 'rxjs';
 import { map, catchError, tap, retry, delay } from 'rxjs/operators';
 import { ExtractionResult, DocumentType } from '../models/document.model';
-import { 
-  IAzureIntelligenceService, 
-  OperationStatus, 
-  InvoiceResult, 
-  ContractResult, 
-  LayoutResult 
+import {
+  IAzureIntelligenceService,
+  OperationStatus,
+  InvoiceResult,
+  ContractResult,
+  LayoutResult
 } from '../interfaces/azure-intelligence-service.interface';
 import { AzureIntelligenceError, AzureErrorCode, ErrorHandler } from '../errors/service-errors';
 import { LoggingService } from './logging.service';
 
 // Azure SDK import - now using the actual SDK
 import DocumentIntelligenceRestClient from '@azure-rest/ai-document-intelligence';
+import {environment} from '../../../environments/environment.local';
 
 // For now, we'll create a simple credential interface since the exact import might vary
 interface AzureKeyCredential {
@@ -49,15 +50,15 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
   }
 
   /**
-   * Initialize the Azure service with configuration
+   * Initialize the Azure service with configuration from environment
    */
   private initializeService(): void {
     try {
-      // In a production environment, these would come from environment variables or configuration service
+      // Load configuration from environment
       this.config = {
-        endpoint: 'https://your-resource.cognitiveservices.azure.com/',
-        apiKey: 'your-api-key',
-        apiVersion: '2024-02-29-preview'
+        endpoint: environment.azure.endpoint,
+        apiKey: environment.azure.apiKey,
+        apiVersion: environment.azure.apiVersion
       };
 
       if (this.config.endpoint && this.config.apiKey) {

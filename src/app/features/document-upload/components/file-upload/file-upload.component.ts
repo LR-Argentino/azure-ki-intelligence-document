@@ -36,7 +36,7 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
             <p>or <span class="upload-link">click to browse</span></p>
             <div class="upload-info">
               <span>Supported format: PDF</span>
-              <span>Maximum size: 50MB</span>
+              <span>Maximum size: 10MB</span>
             </div>
           </div>
         </div>
