@@ -6,129 +6,137 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="error-container" [ngClass]="'error-' + type">
-      <div class="error-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" *ngIf="type === 'success'"/>
-          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" *ngIf="type === 'warning'"/>
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" *ngIf="type === 'error'"/>
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" *ngIf="type === 'info'"/>
-        </svg>
-      </div>
-      <div class="error-content">
-        <h4 *ngIf="title" class="error-title">{{ title }}</h4>
-        <p class="error-message">{{ message }}</p>
-        <div *ngIf="details" class="error-details">
-          <button class="details-toggle" (click)="showDetails = !showDetails">
-            {{ showDetails ? 'Hide' : 'Show' }} Details
-          </button>
-          <div *ngIf="showDetails" class="details-content">
-            {{ details }}
+    <div class="rounded-2xl p-6 animate-slide-up shadow-sm border"
+         [class.bg-gradient-to-r]="true"
+         [class.from-red-50]="type === 'error'"
+         [class.to-pink-50]="type === 'error'"
+         [class.border-red-200]="type === 'error'"
+         [class.from-yellow-50]="type === 'warning'"
+         [class.to-orange-50]="type === 'warning'"
+         [class.border-yellow-200]="type === 'warning'"
+         [class.from-green-50]="type === 'success'"
+         [class.to-emerald-50]="type === 'success'"
+         [class.border-green-200]="type === 'success'"
+         [class.from-blue-50]="type === 'info'"
+         [class.to-cyan-50]="type === 'info'"
+         [class.border-blue-200]="type === 'info'">
+      
+      <div class="flex">
+        <!-- Icon -->
+        <div class="flex-shrink-0">
+          <div class="w-8 h-8 rounded-xl flex items-center justify-center"
+               [class.bg-red-100]="type === 'error'"
+               [class.text-red-600]="type === 'error'"
+               [class.bg-yellow-100]="type === 'warning'"
+               [class.text-yellow-600]="type === 'warning'"
+               [class.bg-green-100]="type === 'success'"
+               [class.text-green-600]="type === 'success'"
+               [class.bg-blue-100]="type === 'info'"
+               [class.text-blue-600]="type === 'info'">
+            
+            <!-- Error Icon -->
+            <svg *ngIf="type === 'error'" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+            </svg>
+            
+            <!-- Warning Icon -->
+            <svg *ngIf="type === 'warning'" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            
+            <!-- Success Icon -->
+            <svg *ngIf="type === 'success'" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            
+            <!-- Info Icon -->
+            <svg *ngIf="type === 'info'" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+        
+        <!-- Content -->
+        <div class="ml-4 flex-1">
+          <h3 *ngIf="title" class="text-base font-semibold mb-1"
+              [class.text-red-800]="type === 'error'"
+              [class.text-yellow-800]="type === 'warning'"
+              [class.text-green-800]="type === 'success'"
+              [class.text-blue-800]="type === 'info'">
+            {{ title }}
+          </h3>
+          
+          <div class="text-sm leading-relaxed"
+               [class.text-red-700]="type === 'error'"
+               [class.text-yellow-700]="type === 'warning'"
+               [class.text-green-700]="type === 'success'"
+               [class.text-blue-700]="type === 'info'">
+            <p>{{ message }}</p>
+          </div>
+          
+          <!-- Details Section -->
+          <div *ngIf="details" class="mt-4">
+            <button (click)="showDetails = !showDetails"
+                    class="inline-flex items-center text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 rounded-lg px-2 py-1 transition-colors"
+                    [class.text-red-600]="type === 'error'"
+                    [class.hover:bg-red-100]="type === 'error'"
+                    [class.focus:ring-red-500]="type === 'error'"
+                    [class.text-yellow-600]="type === 'warning'"
+                    [class.hover:bg-yellow-100]="type === 'warning'"
+                    [class.focus:ring-yellow-500]="type === 'warning'"
+                    [class.text-green-600]="type === 'success'"
+                    [class.hover:bg-green-100]="type === 'success'"
+                    [class.focus:ring-green-500]="type === 'success'"
+                    [class.text-blue-600]="type === 'info'"
+                    [class.hover:bg-blue-100]="type === 'info'"
+                    [class.focus:ring-blue-500]="type === 'info'">
+              <svg class="w-4 h-4 mr-1 transition-transform" [class.rotate-180]="showDetails" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+              {{ showDetails ? 'Hide' : 'Show' }} Details
+            </button>
+            
+            <div *ngIf="showDetails" class="mt-3 p-4 rounded-xl text-xs font-mono whitespace-pre-wrap border"
+                 [class.bg-red-50]="type === 'error'"
+                 [class.text-red-800]="type === 'error'"
+                 [class.border-red-200]="type === 'error'"
+                 [class.bg-yellow-50]="type === 'warning'"
+                 [class.text-yellow-800]="type === 'warning'"
+                 [class.border-yellow-200]="type === 'warning'"
+                 [class.bg-green-50]="type === 'success'"
+                 [class.text-green-800]="type === 'success'"
+                 [class.border-green-200]="type === 'success'"
+                 [class.bg-blue-50]="type === 'info'"
+                 [class.text-blue-800]="type === 'info'"
+                 [class.border-blue-200]="type === 'info'">{{ details }}</div>
           </div>
         </div>
+        
+        <!-- Dismiss Button -->
+        <div *ngIf="dismissible" class="ml-auto pl-3">
+          <button (click)="onDismiss()"
+                  class="inline-flex items-center justify-center w-8 h-8 rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 hover:scale-110"
+                  [class.text-red-500]="type === 'error'"
+                  [class.hover:bg-red-100]="type === 'error'"
+                  [class.focus:ring-red-500]="type === 'error'"
+                  [class.text-yellow-500]="type === 'warning'"
+                  [class.hover:bg-yellow-100]="type === 'warning'"
+                  [class.focus:ring-yellow-500]="type === 'warning'"
+                  [class.text-green-500]="type === 'success'"
+                  [class.hover:bg-green-100]="type === 'success'"
+                  [class.focus:ring-green-500]="type === 'success'"
+                  [class.text-blue-500]="type === 'info'"
+                  [class.hover:bg-blue-100]="type === 'info'"
+                  [class.focus:ring-blue-500]="type === 'info'">
+            <span class="sr-only">Dismiss</span>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
       </div>
-      <button *ngIf="dismissible" class="error-dismiss" (click)="onDismiss()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-        </svg>
-      </button>
     </div>
   `,
-  styles: [`
-    .error-container {
-      display: flex;
-      align-items: flex-start;
-      padding: 16px;
-      border-radius: 8px;
-      margin: 16px 0;
-      border-left: 4px solid;
-    }
-
-    .error-success {
-      background-color: #f0f9ff;
-      border-left-color: #10b981;
-      color: #065f46;
-    }
-
-    .error-warning {
-      background-color: #fffbeb;
-      border-left-color: #f59e0b;
-      color: #92400e;
-    }
-
-    .error-error {
-      background-color: #fef2f2;
-      border-left-color: #ef4444;
-      color: #991b1b;
-    }
-
-    .error-info {
-      background-color: #eff6ff;
-      border-left-color: #3b82f6;
-      color: #1e40af;
-    }
-
-    .error-icon {
-      margin-right: 12px;
-      flex-shrink: 0;
-    }
-
-    .error-content {
-      flex: 1;
-    }
-
-    .error-title {
-      margin: 0 0 8px 0;
-      font-size: 16px;
-      font-weight: 600;
-    }
-
-    .error-message {
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .error-details {
-      margin-top: 12px;
-    }
-
-    .details-toggle {
-      background: none;
-      border: none;
-      color: inherit;
-      text-decoration: underline;
-      cursor: pointer;
-      font-size: 12px;
-      padding: 0;
-    }
-
-    .details-content {
-      margin-top: 8px;
-      padding: 8px;
-      background-color: rgba(0, 0, 0, 0.05);
-      border-radius: 4px;
-      font-size: 12px;
-      font-family: monospace;
-      white-space: pre-wrap;
-    }
-
-    .error-dismiss {
-      background: none;
-      border: none;
-      color: inherit;
-      cursor: pointer;
-      padding: 4px;
-      margin-left: 12px;
-      border-radius: 4px;
-      opacity: 0.7;
-      transition: opacity 0.2s;
-    }
-
-    .error-dismiss:hover {
-      opacity: 1;
-    }
-  `]
+  styles: []
 })
 export class ErrorMessageComponent {
   @Input() type: 'success' | 'warning' | 'error' | 'info' = 'error';

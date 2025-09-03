@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { DocumentService } from '../../../../core/services/document.service';
@@ -10,462 +10,228 @@ import { FileSizePipe } from '../../../../shared/pipes/file-size.pipe';
   standalone: true,
   imports: [CommonModule, RouterModule, FileSizePipe],
   template: `
-    <div class="document-list-container">
-      <div class="list-header">
-        <h3>Recent Documents</h3>
-        <div class="list-actions">
-          <button class="refresh-btn" (click)="refreshList()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
-            </svg>
-            Refresh
-          </button>
+    <div class="space-y-6">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900">Your Documents</h2>
+          <p class="text-sm text-gray-600 mt-1">Manage and view your uploaded documents</p>
         </div>
+        <button (click)="refreshList()" 
+                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+          <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+          </svg>
+          Refresh
+        </button>
       </div>
 
-      <div class="document-grid" *ngIf="documents().length > 0">
+      <!-- Document Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" *ngIf="documents().length > 0">
         <div *ngFor="let document of documents()" 
-             class="document-card"
-             [class.processing]="document.status === 'processing'"
-             [class.failed]="document.status === 'failed'">
+             class="group relative bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden hover:-translate-y-1"
+             [class.border-yellow-200]="document.status === 'processing'"
+             [class.bg-gradient-to-br]="document.status === 'processing'"
+             [class.from-yellow-50]="document.status === 'processing'"
+             [class.to-orange-50]="document.status === 'processing'"
+             [class.border-red-200]="document.status === 'failed'"
+             [class.from-red-50]="document.status === 'failed'"
+             [class.to-pink-50]="document.status === 'failed'">
           
-          <div class="document-header">
-            <div class="document-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-              </svg>
+          <!-- Status Indicator -->
+          <div class="absolute top-4 right-4 z-10">
+            <div class="w-3 h-3 rounded-full"
+                 [class.bg-green-400]="document.status === 'completed'"
+                 [class.bg-yellow-400]="document.status === 'processing'"
+                 [class.bg-red-400]="document.status === 'failed'"
+                 [class.animate-pulse]="document.status === 'processing'">
             </div>
-            <div class="document-status">
-              <span class="status-badge" [class]="'status-' + document.status">
+          </div>
+          
+          <!-- Document Header -->
+          <div class="p-6 pb-4">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center space-x-4">
+                <div class="flex-shrink-0">
+                  <div class="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                    <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                    </svg>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-base font-semibold text-gray-900 truncate mb-1" [title]="document.name">
+                    {{ document.name }}
+                  </h3>
+                  <div class="flex items-center space-x-2 mt-1">
+                    <span class="text-xs text-gray-500">{{ document.type | titlecase }}</span>
+                    <span class="text-xs text-gray-400">•</span>
+                    <span class="text-xs text-gray-500">{{ document.size | fileSize }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Status Badge -->
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    [class.bg-blue-100]="document.status === 'uploading'"
+                    [class.text-blue-800]="document.status === 'uploading'"
+                    [class.bg-yellow-100]="document.status === 'processing'"
+                    [class.text-yellow-800]="document.status === 'processing'"
+                    [class.bg-green-100]="document.status === 'completed'"
+                    [class.text-green-800]="document.status === 'completed'"
+                    [class.bg-red-100]="document.status === 'failed'"
+                    [class.text-red-800]="document.status === 'failed'">
                 {{ getStatusText(document.status) }}
               </span>
             </div>
-          </div>
-
-          <div class="document-content">
-            <h4 class="document-name" [title]="document.name">{{ document.name }}</h4>
-            <div class="document-meta">
-              <span class="document-type">{{ document.type | titlecase }}</span>
-              <span class="document-size">{{ document.size | fileSize }}</span>
-            </div>
-            <div class="document-date">
-              Uploaded {{ formatDate(document.uploadDate) }}
-            </div>
-          </div>
-
-          <div class="document-actions">
-            <button *ngIf="document.status === 'completed'" 
-                    class="action-btn primary"
-                    [routerLink]="['/viewer', document.id]">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/>
-              </svg>
-              View
-            </button>
             
-            <button *ngIf="document.status === 'completed'" 
-                    class="action-btn secondary"
-                    [routerLink]="['/chat', document.id]">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12,3C6.5,3 2,6.58 2,11A7.18,7.18 0 0,0 2.64,14.25L1,22L8.75,20.36C9.81,20.75 10.87,21 12,21C17.5,21 22,17.42 22,13S17.5,3 12,3Z"/>
-              </svg>
-              Chat
-            </button>
-
-            <button *ngIf="document.status === 'failed'" 
-                    class="action-btn retry"
-                    (click)="retryProcessing(document)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
-              </svg>
-              Retry
-            </button>
-
-            <button class="action-btn danger" (click)="deleteDocument(document)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
-              </svg>
-              Delete
-            </button>
+            <!-- Upload Date -->
+            <p class="text-xs text-gray-500 mb-4">
+              Uploaded {{ formatDate(document.uploadDate) }}
+            </p>
           </div>
 
-          <div *ngIf="document.status === 'processing'" class="processing-overlay">
-            <div class="processing-spinner">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="spinning">
-                <path d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
-              </svg>
+          <!-- Actions -->
+          <div class="px-6 pb-6">
+            <div class="flex flex-wrap gap-2">
+              <!-- View Button -->
+              <button *ngIf="document.status === 'completed'" 
+                      [routerLink]="['/viewer', document.id]"
+                      class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/>
+                </svg>
+                View
+              </button>
+              
+              <!-- Chat Button -->
+              <button *ngIf="document.status === 'completed'" 
+                      [routerLink]="['/chat', document.id]"
+                      class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12,3C6.5,3 2,6.58 2,11A7.18,7.18 0 0,0 2.64,14.25L1,22L8.75,20.36C9.81,20.75 10.87,21 12,21C17.5,21 22,17.42 22,13S17.5,3 12,3Z"/>
+                </svg>
+                Chat
+              </button>
+
+              <!-- Retry Button -->
+              <button *ngIf="document.status === 'failed'" 
+                      (click)="retryProcessing(document)"
+                      class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors">
+                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+                </svg>
+                Retry
+              </button>
+
+              <!-- Delete Button -->
+              <button (click)="deleteDocument(document)"
+                      class="inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                </svg>
+                Delete
+              </button>
             </div>
-            <span>Processing...</span>
+          </div>
+
+          <!-- Processing Overlay -->
+          <div *ngIf="document.status === 'processing'" 
+               class="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600 mb-2"></div>
+            <span class="text-sm font-medium text-yellow-800">Processing...</span>
           </div>
         </div>
       </div>
 
-      <div *ngIf="documents().length === 0" class="empty-state">
-        <div class="empty-icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+      <!-- Empty State -->
+      <div *ngIf="documents().length === 0" class="text-center py-12">
+        <div class="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+          <svg class="w-12 h-12 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
             <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
           </svg>
         </div>
-        <h3>No documents uploaded yet</h3>
-        <p>Upload your first PDF document to get started with Azure Document Intelligence.</p>
-        <button class="upload-btn" (click)="onUploadClick()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
+        <p class="text-gray-600 mb-6 max-w-sm mx-auto">
+          Upload your first PDF document to get started with Azure Document Intelligence analysis.
+        </p>
+        <button (click)="onUploadClick()" 
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+          <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
             <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
           </svg>
-          Upload Document
+          Upload Your First Document
         </button>
       </div>
     </div>
   `,
-  styles: [`
-    .document-list-container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .list-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-    }
-
-    .list-header h3 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-      color: #111827;
-    }
-
-    .refresh-btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background-color: transparent;
-      color: #6b7280;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .refresh-btn:hover {
-      background-color: #f9fafb;
-      border-color: #9ca3af;
-    }
-
-    .document-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 24px;
-    }
-
-    .document-card {
-      background-color: #ffffff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 20px;
-      transition: all 0.2s ease;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .document-card:hover {
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      border-color: #d1d5db;
-    }
-
-    .document-card.processing {
-      border-color: #f59e0b;
-      background-color: #fffbeb;
-    }
-
-    .document-card.failed {
-      border-color: #ef4444;
-      background-color: #fef2f2;
-    }
-
-    .document-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 16px;
-    }
-
-    .document-icon {
-      color: #007acc;
-    }
-
-    .status-badge {
-      font-size: 11px;
-      padding: 4px 8px;
-      border-radius: 12px;
-      text-transform: uppercase;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-    }
-
-    .status-uploading {
-      background-color: #dbeafe;
-      color: #1e40af;
-    }
-
-    .status-processing {
-      background-color: #fef3c7;
-      color: #92400e;
-    }
-
-    .status-completed {
-      background-color: #d1fae5;
-      color: #065f46;
-    }
-
-    .status-failed {
-      background-color: #fee2e2;
-      color: #991b1b;
-    }
-
-    .document-content {
-      margin-bottom: 20px;
-    }
-
-    .document-name {
-      margin: 0 0 8px 0;
-      font-size: 16px;
-      font-weight: 600;
-      color: #111827;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .document-meta {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 8px;
-      font-size: 14px;
-      color: #6b7280;
-    }
-
-    .document-date {
-      font-size: 12px;
-      color: #9ca3af;
-    }
-
-    .document-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .action-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-decoration: none;
-      border: none;
-    }
-
-    .action-btn.primary {
-      background-color: #007acc;
-      color: white;
-    }
-
-    .action-btn.primary:hover {
-      background-color: #0056b3;
-    }
-
-    .action-btn.secondary {
-      background-color: #10b981;
-      color: white;
-    }
-
-    .action-btn.secondary:hover {
-      background-color: #059669;
-    }
-
-    .action-btn.retry {
-      background-color: #f59e0b;
-      color: white;
-    }
-
-    .action-btn.retry:hover {
-      background-color: #d97706;
-    }
-
-    .action-btn.danger {
-      background-color: transparent;
-      color: #ef4444;
-      border: 1px solid #fecaca;
-    }
-
-    .action-btn.danger:hover {
-      background-color: #fef2f2;
-      border-color: #ef4444;
-    }
-
-    .processing-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(255, 255, 255, 0.9);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      font-size: 14px;
-      color: #f59e0b;
-      font-weight: 500;
-    }
-
-    .processing-spinner .spinning {
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 64px 32px;
-      color: #6b7280;
-    }
-
-    .empty-state h3 {
-      margin: 16px 0 8px 0;
-      font-size: 20px;
-      font-weight: 600;
-      color: #374151;
-    }
-
-    .empty-state p {
-      margin: 0 0 24px 0;
-      font-size: 16px;
-      max-width: 400px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    .upload-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 24px;
-      background-color: #007acc;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-
-    .upload-btn:hover {
-      background-color: #0056b3;
-    }
-
-    /* Mobile responsive */
-    @media (max-width: 768px) {
-      .document-grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
-      }
-
-      .list-header {
-        flex-direction: column;
-        gap: 16px;
-        align-items: stretch;
-      }
-
-      .document-actions {
-        justify-content: space-between;
-      }
-
-      .action-btn {
-        flex: 1;
-        justify-content: center;
-      }
-    }
-  `]
+  styles: []
 })
-export class DocumentListComponent {
+export class DocumentListComponent implements OnInit {
   @Output() uploadClick = new EventEmitter<void>();
 
+  documents!: any;
+
   constructor(private documentService: DocumentService) {}
-  
-  // Expose document signal
-  get documents() {
-    return this.documentService.documentsSignal;
-  }
 
-  refreshList(): void {
-    // Refresh document list
-    console.log('Refreshing document list');
-  }
-
-  retryProcessing(document: Document): void {
-    // Retry processing logic
-    console.log('Retrying processing for document:', document.id);
-  }
-
-  deleteDocument(document: Document): void {
-    if (confirm(`Are you sure you want to delete "${document.name}"?`)) {
-      this.documentService.deleteDocument(document.id).subscribe(() => {
-        console.log('Document deleted:', document.id);
-      });
-    }
-  }
-
-  onUploadClick(): void {
-    this.uploadClick.emit();
+  ngOnInit(): void {
+    this.documents = this.documentService.documentsSignal;
   }
 
   getStatusText(status: ProcessingStatus): string {
     switch (status) {
-      case ProcessingStatus.UPLOADING:
+      case 'uploading':
         return 'Uploading';
-      case ProcessingStatus.PROCESSING:
+      case 'processing':
         return 'Processing';
-      case ProcessingStatus.COMPLETED:
-        return 'Completed';
-      case ProcessingStatus.FAILED:
+      case 'completed':
+        return 'Ready';
+      case 'failed':
         return 'Failed';
       default:
-        return status;
+        return 'Unknown';
     }
   }
 
   formatDate(date: Date): string {
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+    const diffInDays = diffInHours / 24;
 
-    if (diffMins < 1) {
-      return 'just now';
-    } else if (diffMins < 60) {
-      return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    } else if (diffHours < 24) {
-      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    } else if (diffDays < 7) {
-      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffInHours < 1) {
+      const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+      return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
+    } else if (diffInHours < 24) {
+      const hours = Math.floor(diffInHours);
+      return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+    } else if (diffInDays < 7) {
+      const days = Math.floor(diffInDays);
+      return `${days} day${days !== 1 ? 's' : ''} ago`;
     } else {
       return date.toLocaleDateString();
     }
+  }
+
+  refreshList(): void {
+    // Refresh the document list by getting all documents
+    this.documentService.getAllDocuments().subscribe();
+  }
+
+  retryProcessing(document: Document): void {
+    // For now, just update the status to processing
+    // In a real implementation, this would retry the Azure processing
+    const updatedDocument = { ...document, status: 'processing' as ProcessingStatus };
+    this.documentService.updateDocument(updatedDocument).subscribe();
+  }
+
+  deleteDocument(document: Document): void {
+    if (confirm(`Are you sure you want to delete "${document.name}"?`)) {
+      this.documentService.deleteDocument(document.id);
+    }
+  }
+
+  onUploadClick(): void {
+    this.uploadClick.emit();
   }
 }

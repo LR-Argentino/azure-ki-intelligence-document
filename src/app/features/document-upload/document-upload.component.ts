@@ -19,18 +19,83 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
     ErrorMessageComponent
   ],
   template: `
-    <div class="document-upload-page">
-      <div class="page-header">
-        <h1>Document Upload</h1>
-        <p>Upload PDF documents for analysis with Azure Document Intelligence</p>
+    <div class="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 py-12">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Hero Section -->
+        <div class="text-center mb-16">
+          <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-600 rounded-3xl mb-8 shadow-2xl animate-float">
+            <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+          </div>
+          <h1 class="text-5xl font-bold mb-6">
+            <span class="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              Upload Documents
+            </span>
+          </h1>
+          <p class="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+            Transform your documents with AI-powered intelligence. Upload PDFs to extract text, 
+            tables, and key insights automatically with Azure Document Intelligence.
+          </p>
+          
+          <!-- Feature highlights -->
+          <div class="flex flex-wrap justify-center gap-6 mt-8">
+            <div class="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+              <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+              </svg>
+              <span class="text-sm font-medium text-gray-700">Text Extraction</span>
+            </div>
+            <div class="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+              <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+              </svg>
+              <span class="text-sm font-medium text-gray-700">Table Detection</span>
+            </div>
+            <div class="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
+              <svg class="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+              </svg>
+              <span class="text-sm font-medium text-gray-700">Key-Value Pairs</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="max-w-4xl mx-auto">
+          <div class="bg-white/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 mb-8">
+            <app-file-upload
+              (fileSelected)="onFileSelected($event)"
+              (fileUploaded)="onFileUploaded($event)">
+            </app-file-upload>
+
+            <!-- Progress Component -->
+            <div class="mt-8" *ngIf="showProgress">
+              <app-upload-progress
+                [isVisible]="showProgress"
+                [progress]="uploadProgress"
+              [status]="uploadStatus"
+              [title]="progressTitle"
+              [description]="progressDescription"
+              [fileName]="currentFileName"
+              [fileSize]="currentFileSize">
+            </app-upload-progress>
+          </div>
+
+          <!-- Error Message -->
+          <div class="mt-6">
+            <app-error-message
+              *ngIf="errorMessage"
+              type="error"
+              title="Upload Error"
+              [message]="errorMessage"
+              (dismiss)="clearError()">
+            </app-error-message>
+          </div>
       </div>
 
-      <div class="upload-section">
-        <app-file-upload
-          (fileSelected)="onFileSelected($event)"
-          (fileUploaded)="onFileUploaded($event)">
-        </app-file-upload>
-
+      <!-- Progress Component -->
+      <div *ngIf="showProgress" class="max-w-2xl mx-auto">
         <app-upload-progress
           [isVisible]="showProgress"
           [progress]="uploadProgress"
@@ -40,9 +105,11 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
           [fileName]="currentFileName"
           [fileSize]="currentFileSize">
         </app-upload-progress>
+      </div>
 
+      <!-- Error Message -->
+      <div *ngIf="errorMessage" class="max-w-2xl mx-auto">
         <app-error-message
-          *ngIf="errorMessage"
           type="error"
           title="Upload Error"
           [message]="errorMessage"
@@ -50,81 +117,63 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
         </app-error-message>
       </div>
 
-      <div class="documents-section">
-        <app-document-list
-          (uploadClick)="scrollToUpload()">
-        </app-document-list>
+      <!-- Features Section -->
+      <div class="max-w-4xl mx-auto">
+        <div class="text-center mb-12">
+          <h2 class="text-2xl font-bold text-gray-900 mb-4">Powerful Document Analysis</h2>
+          <p class="text-gray-600">Leverage Azure's AI to extract insights from your documents</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div class="text-center p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl mb-4">
+              <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M4,6H20V16H4M20,18A2,2 0 0,0 22,16V6C22,4.89 21.1,4 20,4H4C2.89,4 2,4.89 2,6V16A2,2 0 0,0 4,18H0V20H24V18H20Z"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Text Extraction</h3>
+            <p class="text-gray-600">Extract all text content with high accuracy, including handwritten text</p>
+          </div>
+          
+          <div class="text-center p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div class="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-xl mb-4">
+              <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3,3H21V5H3V3M3,7H15V9H3V7M3,11H21V13H3V11M3,15H15V17H3V15M3,19H21V21H3V19Z"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Table Detection</h3>
+            <p class="text-gray-600">Automatically identify and extract structured data from tables</p>
+          </div>
+          
+          <div class="text-center p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
+            <div class="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-xl mb-4">
+              <svg class="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7H14A7,7 0 0,1 21,14H22A1,1 0 0,1 23,15V18A1,1 0 0,1 22,19H21V20A2,2 0 0,1 19,22H5A2,2 0 0,1 3,20V19H2A1,1 0 0,1 1,18V15A1,1 0 0,1 2,14H3A7,7 0 0,1 10,7H11V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2M7.5,13A2.5,2.5 0 0,0 5,15.5A2.5,2.5 0 0,0 7.5,18A2.5,2.5 0 0,0 10,15.5A2.5,2.5 0 0,0 7.5,13M16.5,13A2.5,2.5 0 0,0 14,15.5A2.5,2.5 0 0,0 16.5,18A2.5,2.5 0 0,0 19,15.5A2.5,2.5 0 0,0 16.5,13Z"/>
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Key-Value Pairs</h3>
+            <p class="text-gray-600">Identify form fields and extract key-value relationships</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Documents Section -->
+      <div class="max-w-6xl mx-auto">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h2 class="text-lg font-semibold text-gray-900">Your Documents</h2>
+            <p class="text-sm text-gray-600 mt-1">Manage and view your uploaded documents</p>
+          </div>
+          <div class="p-6">
+            <app-document-list
+              (uploadClick)="scrollToUpload()">
+            </app-document-list>
+          </div>
+        </div>
       </div>
     </div>
   `,
-  styles: [`
-    .document-upload-page {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-
-    .page-header {
-      text-align: center;
-      margin-bottom: 48px;
-    }
-
-    .page-header h1 {
-      margin: 0 0 16px 0;
-      font-size: 32px;
-      font-weight: 700;
-      color: #111827;
-    }
-
-    .page-header p {
-      margin: 0;
-      font-size: 18px;
-      color: #6b7280;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-    .upload-section {
-      margin-bottom: 64px;
-    }
-
-    .documents-section {
-      margin-bottom: 48px;
-    }
-
-    /* Mobile responsive */
-    @media (max-width: 768px) {
-      .document-upload-page {
-        padding: 0 16px;
-      }
-
-      .page-header {
-        margin-bottom: 32px;
-      }
-
-      .page-header h1 {
-        font-size: 28px;
-      }
-
-      .page-header p {
-        font-size: 16px;
-      }
-
-      .upload-section {
-        margin-bottom: 48px;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .document-upload-page {
-        padding: 0 12px;
-      }
-
-      .page-header h1 {
-        font-size: 24px;
-      }
-    }
-  `]
+  styles: []
 })
 export class DocumentUploadComponent {
   showProgress = false;
@@ -235,11 +284,8 @@ export class DocumentUploadComponent {
   }
 
   scrollToUpload(): void {
-    // Scroll to upload section
-    const uploadSection = document.querySelector('.upload-section');
-    if (uploadSection) {
-      uploadSection.scrollIntoView({ behavior: 'smooth' });
-    }
+    // Scroll to top of page where upload section is
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   private formatFileSize(bytes: number): string {

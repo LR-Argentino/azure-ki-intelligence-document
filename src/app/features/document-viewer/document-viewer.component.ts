@@ -11,37 +11,61 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
   standalone: true,
   imports: [CommonModule, RouterModule, LoadingSpinnerComponent, ErrorMessageComponent],
   template: `
-    <div class="document-viewer-page">
-      <div class="viewer-header">
-        <div class="header-left">
-          <button class="back-btn" (click)="goBack()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/>
-            </svg>
-            Back to Upload
-          </button>
-          <div class="document-info" *ngIf="currentDocument">
-            <h1>{{ currentDocument.name }}</h1>
-            <div class="document-meta">
-              <span class="document-type">{{ currentDocument.type | titlecase }}</span>
-              <span class="document-status" [class]="'status-' + currentDocument.status">
-                {{ currentDocument.status | titlecase }}
-              </span>
+    <div class="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
+      <!-- Modern Header -->
+      <div class="bg-white/90 backdrop-blur-xl border-b border-gray-200/60 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="flex items-center justify-between h-16">
+            <div class="flex items-center space-x-4">
+              <button (click)="goBack()" 
+                      class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+                Back to Upload
+              </button>
+              
+              <div class="h-8 w-px bg-gray-300"></div>
+              
+              <div *ngIf="currentDocument" class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h1 class="text-lg font-semibold text-gray-900">{{ currentDocument.name }}</h1>
+                  <div class="flex items-center space-x-2 text-sm text-gray-500">
+                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">{{ currentDocument.type | titlecase }}</span>
+                    <span class="px-2 py-1 rounded-full text-xs font-medium"
+                          [class.bg-green-100]="currentDocument.status === 'completed'"
+                          [class.text-green-700]="currentDocument.status === 'completed'"
+                          [class.bg-yellow-100]="currentDocument.status === 'processing'"
+                          [class.text-yellow-700]="currentDocument.status === 'processing'"
+                          [class.bg-red-100]="currentDocument.status === 'failed'"
+                          [class.text-red-700]="currentDocument.status === 'failed'"
+                          [class.bg-blue-100]="currentDocument.status === 'uploading'"
+                          [class.text-blue-700]="currentDocument.status === 'uploading'">
+                      {{ currentDocument.status | titlecase }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
+            
+            <button [routerLink]="['/chat', documentId]" 
+                    class="btn-primary">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>
+              Chat with Document
+            </button>
           </div>
-        </div>
-        
-        <div class="header-actions">
-          <button class="action-btn" [routerLink]="['/chat', documentId]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12,3C6.5,3 2,6.58 2,11A7.18,7.18 0 0,0 2.64,14.25L1,22L8.75,20.36C9.81,20.75 10.87,21 12,21C17.5,21 22,17.42 22,13S17.5,3 12,3Z"/>
-            </svg>
-            Chat with Document
-          </button>
         </div>
       </div>
 
-      <div class="viewer-content">
+      <!-- Document Content -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <app-loading-spinner 
           *ngIf="isLoading" 
           [size]="48" 

@@ -8,335 +8,182 @@ import { DocumentService } from '../../core/services/document.service';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <aside class="sidebar" [class.open]="isOpen">
-      <div class="sidebar-content">
-        <div class="sidebar-header">
-          <h3>Documents</h3>
-          <button class="close-btn" (click)="closeSidebar()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"/>
-            </svg>
-          </button>
-        </div>
-
-        <div class="sidebar-section">
-          <h4>Recent Documents</h4>
-          <div class="document-list">
-            <div *ngFor="let document of documents()" 
-                 class="document-item"
-                 [class.active]="currentDocument()?.id === document.id"
-                 (click)="selectDocument(document.id)">
-              <div class="document-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <!-- Desktop Sidebar -->
+    <aside class="hidden lg:flex lg:flex-col lg:w-80 lg:fixed lg:inset-y-16 lg:z-50 lg:bg-white lg:border-r lg:border-gray-200">
+      <div class="flex-1 flex flex-col min-h-0 overflow-y-auto">
+        <div class="flex-1 px-4 py-6">
+          <!-- Documents Section -->
+          <div class="mb-8">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Documents</h3>
+            
+            <div class="space-y-2">
+              <div *ngFor="let document of documents()" 
+                   class="group flex items-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-50"
+                   [class.bg-primary-50]="currentDocument()?.id === document.id"
+                   [class.border-primary-200]="currentDocument()?.id === document.id"
+                   (click)="selectDocument(document.id)">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-gray-400 group-hover:text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                  </svg>
+                </div>
+                <div class="ml-3 flex-1 min-w-0">
+                  <p class="text-sm font-medium text-gray-900 truncate">{{ document.name }}</p>
+                  <div class="flex items-center mt-1 space-x-2">
+                    <span class="text-xs text-gray-500 capitalize">{{ document.type }}</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          [ngClass]="{
+                            'bg-yellow-100 text-yellow-800': document.status === 'uploading',
+                            'bg-blue-100 text-blue-800': document.status === 'processing',
+                            'bg-green-100 text-green-800': document.status === 'completed',
+                            'bg-red-100 text-red-800': document.status === 'failed'
+                          }">
+                      {{ document.status }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Empty State -->
+              <div *ngIf="documents().length === 0" class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
                 </svg>
-              </div>
-              <div class="document-info">
-                <div class="document-name">{{ document.name }}</div>
-                <div class="document-meta">
-                  <span class="document-type">{{ document.type }}</span>
-                  <span class="document-status" [class]="'status-' + document.status">
-                    {{ document.status }}
-                  </span>
+                <h3 class="mt-4 text-sm font-medium text-gray-900">No documents</h3>
+                <p class="mt-2 text-sm text-gray-500">Get started by uploading a document.</p>
+                <div class="mt-6">
+                  <button routerLink="/upload" 
+                          class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+                    <svg class="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                    </svg>
+                    Upload Document
+                  </button>
                 </div>
               </div>
             </div>
-            
-            <div *ngIf="documents().length === 0" class="empty-state">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
-                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-              </svg>
-              <p>No documents uploaded yet</p>
-              <button routerLink="/upload" class="upload-btn" (click)="closeSidebar()">
-                Upload Document
+          </div>
+
+          <!-- Quick Actions -->
+          <div>
+            <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Quick Actions</h4>
+            <div class="space-y-2">
+              <button routerLink="/upload" 
+                      class="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 hover:text-gray-900 transition-colors">
+                <svg class="mr-3 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                </svg>
+                Upload New Document
+              </button>
+              <button (click)="clearHistory()" 
+                      class="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 hover:text-gray-900 transition-colors">
+                <svg class="mr-3 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                </svg>
+                Clear History
               </button>
             </div>
           </div>
         </div>
+      </div>
+    </aside>
 
-        <div class="sidebar-section">
-          <h4>Quick Actions</h4>
-          <div class="quick-actions">
-            <button routerLink="/upload" class="action-btn" (click)="closeSidebar()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+    <!-- Mobile Sidebar -->
+    <div class="lg:hidden">
+      <div *ngIf="isOpen" class="fixed inset-0 flex z-40">
+        <!-- Overlay -->
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-75" (click)="closeSidebar()"></div>
+        
+        <!-- Sidebar -->
+        <div class="relative flex-1 flex flex-col max-w-xs w-full bg-white">
+          <div class="absolute top-0 right-0 -mr-12 pt-2">
+            <button (click)="closeSidebar()" 
+                    class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white">
+              <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
-              Upload New Document
             </button>
-            <button class="action-btn" (click)="clearHistory()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
-              </svg>
-              Clear History
-            </button>
+          </div>
+          
+          <div class="flex-1 h-0 pt-5 pb-4 overflow-y-auto">
+            <div class="px-4">
+              <!-- Mobile Documents Section -->
+              <div class="mb-8">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Documents</h3>
+                
+                <div class="space-y-2">
+                  <div *ngFor="let document of documents()" 
+                       class="group flex items-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-50"
+                       [class.bg-primary-50]="currentDocument()?.id === document.id"
+                       (click)="selectDocument(document.id); closeSidebar()">
+                    <div class="flex-shrink-0">
+                      <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                      </svg>
+                    </div>
+                    <div class="ml-3 flex-1 min-w-0">
+                      <p class="text-sm font-medium text-gray-900 truncate">{{ document.name }}</p>
+                      <div class="flex items-center mt-1 space-x-2">
+                        <span class="text-xs text-gray-500 capitalize">{{ document.type }}</span>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              [ngClass]="{
+                                'bg-yellow-100 text-yellow-800': document.status === 'uploading',
+                                'bg-blue-100 text-blue-800': document.status === 'processing',
+                                'bg-green-100 text-green-800': document.status === 'completed',
+                                'bg-red-100 text-red-800': document.status === 'failed'
+                              }">
+                          {{ document.status }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Mobile Empty State -->
+                  <div *ngIf="documents().length === 0" class="text-center py-8">
+                    <svg class="mx-auto h-12 w-12 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                    </svg>
+                    <h3 class="mt-4 text-sm font-medium text-gray-900">No documents</h3>
+                    <p class="mt-2 text-sm text-gray-500">Get started by uploading a document.</p>
+                    <div class="mt-4">
+                      <button routerLink="/upload" 
+                              (click)="closeSidebar()"
+                              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 transition-colors">
+                        Upload Document
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Mobile Quick Actions -->
+              <div>
+                <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Quick Actions</h4>
+                <div class="space-y-2">
+                  <button routerLink="/upload" 
+                          (click)="closeSidebar()"
+                          class="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
+                    <svg class="mr-3 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                    </svg>
+                    Upload New Document
+                  </button>
+                  <button (click)="clearHistory()" 
+                          class="w-full flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors">
+                    <svg class="mr-3 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                    </svg>
+                    Clear History
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      
-      <div class="sidebar-overlay" [class.visible]="isOpen" (click)="closeSidebar()"></div>
-    </aside>
+    </div>
   `,
-  styles: [`
-    .sidebar {
-      position: fixed;
-      top: 64px;
-      left: 0;
-      width: 320px;
-      height: calc(100vh - 64px);
-      background-color: #ffffff;
-      border-right: 1px solid #e5e7eb;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease;
-      z-index: 999;
-      overflow-y: auto;
-    }
-
-    .sidebar.open {
-      transform: translateX(0);
-    }
-
-    .sidebar-content {
-      padding: 24px;
-      height: 100%;
-    }
-
-    .sidebar-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
-    }
-
-    .sidebar-header h3 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #111827;
-    }
-
-    .close-btn {
-      display: none;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border: none;
-      border-radius: 6px;
-      background-color: transparent;
-      color: #6b7280;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .close-btn:hover {
-      background-color: #f3f4f6;
-      color: #374151;
-    }
-
-    .sidebar-section {
-      margin-bottom: 32px;
-    }
-
-    .sidebar-section h4 {
-      margin: 0 0 16px 0;
-      font-size: 14px;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .document-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .document-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: 1px solid transparent;
-    }
-
-    .document-item:hover {
-      background-color: #f9fafb;
-      border-color: #e5e7eb;
-    }
-
-    .document-item.active {
-      background-color: #eff6ff;
-      border-color: #007acc;
-    }
-
-    .document-icon {
-      flex-shrink: 0;
-      color: #6b7280;
-    }
-
-    .document-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .document-name {
-      font-size: 14px;
-      font-weight: 500;
-      color: #111827;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .document-meta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 4px;
-    }
-
-    .document-type {
-      font-size: 12px;
-      color: #6b7280;
-      text-transform: capitalize;
-    }
-
-    .document-status {
-      font-size: 11px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      text-transform: uppercase;
-      font-weight: 500;
-    }
-
-    .status-uploading {
-      background-color: #fef3c7;
-      color: #92400e;
-    }
-
-    .status-processing {
-      background-color: #dbeafe;
-      color: #1e40af;
-    }
-
-    .status-completed {
-      background-color: #d1fae5;
-      color: #065f46;
-    }
-
-    .status-failed {
-      background-color: #fee2e2;
-      color: #991b1b;
-    }
-
-    .empty-state {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 32px 16px;
-      text-align: center;
-      color: #6b7280;
-    }
-
-    .empty-state p {
-      margin: 16px 0;
-      font-size: 14px;
-    }
-
-    .upload-btn {
-      padding: 8px 16px;
-      background-color: #007acc;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      text-decoration: none;
-      display: inline-block;
-    }
-
-    .upload-btn:hover {
-      background-color: #0056b3;
-    }
-
-    .quick-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .action-btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px;
-      background-color: transparent;
-      border: 1px solid #e5e7eb;
-      border-radius: 6px;
-      color: #374151;
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-decoration: none;
-    }
-
-    .action-btn:hover {
-      background-color: #f9fafb;
-      border-color: #d1d5db;
-    }
-
-    .sidebar-overlay {
-      display: none;
-      position: fixed;
-      top: 64px;
-      left: 0;
-      width: 100vw;
-      height: calc(100vh - 64px);
-      background-color: rgba(0, 0, 0, 0.5);
-      z-index: 998;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-
-    .sidebar-overlay.visible {
-      opacity: 1;
-    }
-
-    /* Mobile responsive */
-    @media (max-width: 768px) {
-      .sidebar {
-        width: 280px;
-      }
-
-      .close-btn {
-        display: flex;
-      }
-
-      .sidebar-overlay {
-        display: block;
-      }
-    }
-
-    /* Desktop - always visible */
-    @media (min-width: 1024px) {
-      .sidebar {
-        position: static;
-        transform: none;
-        height: calc(100vh - 64px);
-        border-right: 1px solid #e5e7eb;
-      }
-
-      .sidebar-overlay {
-        display: none !important;
-      }
-    }
-  `]
+  styles: []
 })
 export class SidebarComponent {
   @Input() isOpen = false;
