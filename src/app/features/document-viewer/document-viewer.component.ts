@@ -1,15 +1,17 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { DocumentService } from '../../core/services/document.service';
 import { Document } from '../../core/models/document.model';
 import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner/loading-spinner.component';
 import { ErrorMessageComponent } from '../../shared/components/error-message/error-message.component';
+import { PdfViewerComponent, PdfViewerState } from '../../shared/components/pdf-viewer/pdf-viewer.component';
+import { PdfPageInfo } from '../../core/services/pdf-renderer.service';
 
 @Component({
   selector: 'app-document-viewer',
   standalone: true,
-  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, ErrorMessageComponent],
+  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, ErrorMessageComponent, PdfViewerComponent],
   template: `
     <div class="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
       <!-- Modern Header -->
@@ -80,38 +82,36 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
         </app-error-message>
 
         <div *ngIf="currentDocument && !isLoading && !errorMessage" class="document-content">
-          <div class="viewer-placeholder">
+          <!-- PDF Viewer -->
+          <div *ngIf="currentDocument.pdfData" class="pdf-viewer-wrapper">
+            <app-pdf-viewer 
+              [pdfData]="currentDocument.pdfData"
+              (stateChange)="onPdfViewerStateChange($event)"
+              (pageRendered)="onPageRendered($event)">
+            </app-pdf-viewer>
+          </div>
+          
+          <!-- Fallback for documents without PDF data -->
+          <div *ngIf="!currentDocument.pdfData" class="no-pdf-placeholder">
             <div class="placeholder-icon">
               <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
                 <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
               </svg>
             </div>
-            <h3>Document Viewer</h3>
-            <p>PDF viewer and bounding box overlay will be implemented here.</p>
-            <div class="placeholder-features">
-              <div class="feature-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/>
-                </svg>
-                PDF Rendering with PDF.js
+            <h3>PDF Not Available</h3>
+            <p>The PDF data for this document is not available for viewing.</p>
+            <div class="document-info-card">
+              <div class="info-item">
+                <span class="label">Document Type:</span>
+                <span class="value">{{ currentDocument.type | titlecase }}</span>
               </div>
-              <div class="feature-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12,2A2,2 0 0,1 14,4C14,5.5 13,6.19 13,7.5V9A1,1 0 0,1 12,10A1,1 0 0,1 11,9V7.5C11,6.19 10,5.5 10,4A2,2 0 0,1 12,2M21,9V7H15L13.5,7.5C13.1,7.65 12.6,7.5 12.3,7.1C11.95,6.75 11.95,6.25 12.3,5.9L14,4.5V2A4,4 0 0,0 8,6C8,7.5 9,8.5 9,10V11A2,2 0 0,0 7,13H6V21A1,1 0 0,0 7,22H17A1,1 0 0,0 18,21V13H17A2,2 0 0,0 15,11V10C15,8.5 16,7.5 16,6H21V4A2,2 0 0,1 23,6V9A2,2 0 0,1 21,9Z"/>
-                </svg>
-                Interactive Bounding Box Overlays
+              <div class="info-item">
+                <span class="label">Status:</span>
+                <span class="value">{{ currentDocument.status | titlecase }}</span>
               </div>
-              <div class="feature-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M11,16.5L6.5,12L7.91,10.59L11,13.67L16.59,8.09L18,9.5L11,16.5Z"/>
-                </svg>
-                Extraction Results Display
-              </div>
-              <div class="feature-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
-                </svg>
-                Zoom and Pan Controls
+              <div class="info-item">
+                <span class="label">Upload Date:</span>
+                <span class="value">{{ currentDocument.uploadDate | date:'medium' }}</span>
               </div>
             </div>
           </div>
@@ -229,13 +229,19 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
     }
 
     .document-content {
-      height: 100%;
+      height: calc(100vh - 200px);
       background-color: #ffffff;
       border-radius: 8px;
       border: 1px solid #e5e7eb;
+      overflow: hidden;
     }
 
-    .viewer-placeholder {
+    .pdf-viewer-wrapper {
+      height: 100%;
+      width: 100%;
+    }
+
+    .no-pdf-placeholder {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -246,41 +252,48 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
       color: #6b7280;
     }
 
-    .viewer-placeholder h3 {
+    .no-pdf-placeholder h3 {
       margin: 16px 0 8px 0;
       font-size: 24px;
       font-weight: 600;
       color: #374151;
     }
 
-    .viewer-placeholder p {
+    .no-pdf-placeholder p {
       margin: 0 0 32px 0;
       font-size: 16px;
       max-width: 400px;
     }
 
-    .placeholder-features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 16px;
-      max-width: 600px;
+    .document-info-card {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 400px;
       width: 100%;
     }
 
-    .feature-item {
+    .info-item {
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background-color: #f9fafb;
-      border-radius: 8px;
-      font-size: 14px;
-      color: #374151;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
     }
 
-    .feature-item svg {
-      color: #007acc;
-      flex-shrink: 0;
+    .info-item:last-child {
+      border-bottom: none;
+    }
+
+    .info-item .label {
+      font-weight: 500;
+      color: #64748b;
+    }
+
+    .info-item .value {
+      font-weight: 600;
+      color: #1e293b;
     }
 
     /* Mobile responsive */
@@ -311,11 +324,12 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
     }
   `]
 })
-export class DocumentViewerComponent implements OnInit {
+export class DocumentViewerComponent implements OnInit, OnDestroy {
   documentId: string = '';
   currentDocument: Document | null = null;
   isLoading = true;
   errorMessage = '';
+  pdfViewerState: PdfViewerState | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -326,6 +340,10 @@ export class DocumentViewerComponent implements OnInit {
   ngOnInit(): void {
     this.documentId = this.route.snapshot.paramMap.get('id') || '';
     this.loadDocument();
+  }
+
+  ngOnDestroy(): void {
+    // Cleanup is handled by the PDF viewer component
   }
 
   private loadDocument(): void {
@@ -345,6 +363,15 @@ export class DocumentViewerComponent implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+  onPdfViewerStateChange(state: PdfViewerState): void {
+    this.pdfViewerState = state;
+  }
+
+  onPageRendered(pageInfo: PdfPageInfo): void {
+    console.log('Page rendered:', pageInfo);
+    // This can be used for future features like bounding box overlays
   }
 
   goBack(): void {

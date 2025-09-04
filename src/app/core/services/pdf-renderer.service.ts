@@ -1,182 +1,199 @@
 import { Injectable } from '@angular/core';
-import { Observable, from, throwError } from 'rxjs';
-import { PageDimensions } from '../models/bounding-box.model';
+import * as pdfjsLib from 'pdfjs-dist';
+import { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 
-// Note: In a real implementation, you would import PDF.js
-// import * as pdfjsLib from 'pdfjs-dist';
+// Configure PDF.js worker - use file in public directory
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
 
-export interface PDFDocumentProxy {
-  numPages: number;
-  getPage(pageNumber: number): Promise<PDFPageProxy>;
+export interface PdfRenderOptions {
+  scale: number;
+  rotation: number;
 }
 
-export interface PDFPageProxy {
-  getViewport(options: { scale: number }): PDFPageViewport;
-  render(renderContext: PDFRenderContext): PDFRenderTask;
-}
-
-export interface PDFPageViewport {
+export interface PdfPageInfo {
+  pageNumber: number;
   width: number;
   height: number;
   scale: number;
-}
-
-export interface PDFRenderContext {
-  canvasContext: CanvasRenderingContext2D;
-  viewport: PDFPageViewport;
-}
-
-export interface PDFRenderTask {
-  promise: Promise<void>;
+  rotation: number;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class PdfRendererService {
-  
-  constructor() {
-    // In a real implementation, configure PDF.js worker
-    // pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.js';
-  }
+  private currentDocument: PDFDocumentProxy | null = null;
+  private renderTasks: Map<number, RenderTask> = new Map();
+
+  constructor() {}
 
   /**
-   * Load PDF document
+   * Load PDF document from ArrayBuffer
    */
-  loadPDF(file: File): Observable<PDFDocumentProxy> {
-    return from(this.loadPDFFromFile(file));
-  }
-
-  /**
-   * Render specific page
-   */
-  renderPage(
-    pdf: PDFDocumentProxy, 
-    pageNumber: number, 
-    canvas: HTMLCanvasElement,
-    scale: number = 1
-  ): Observable<void> {
-    return from(this.renderPageToCanvas(pdf, pageNumber, canvas, scale));
-  }
-
-  /**
-   * Get page dimensions
-   */
-  getPageDimensions(
-    pdf: PDFDocumentProxy, 
-    pageNumber: number,
-    scale: number = 1
-  ): Observable<PageDimensions> {
-    return from(this.getPageDimensionsInternal(pdf, pageNumber, scale));
-  }
-
-  /**
-   * Get total number of pages
-   */
-  getPageCount(pdf: PDFDocumentProxy): number {
-    return pdf.numPages;
-  }
-
-  private async loadPDFFromFile(file: File): Promise<PDFDocumentProxy> {
+  async loadDocument(pdfData: ArrayBuffer): Promise<PDFDocumentProxy> {
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Mock PDF document for now
-      // In real implementation: return await pdfjsLib.getDocument(arrayBuffer).promise;
-      return this.createMockPDFDocument();
-    } catch (error) {
-      throw new Error(`Failed to load PDF: ${error}`);
-    }
-  }
-
-  private async renderPageToCanvas(
-    pdf: PDFDocumentProxy,
-    pageNumber: number,
-    canvas: HTMLCanvasElement,
-    scale: number
-  ): Promise<void> {
-    try {
-      // Mock implementation
-      // In real implementation:
-      // const page = await pdf.getPage(pageNumber);
-      // const viewport = page.getViewport({ scale });
-      // const context = canvas.getContext('2d');
-      // 
-      // canvas.height = viewport.height;
-      // canvas.width = viewport.width;
-      // 
-      // const renderContext = {
-      //   canvasContext: context,
-      //   viewport: viewport
-      // };
-      // 
-      // await page.render(renderContext).promise;
-
-      // Mock rendering
-      const context = canvas.getContext('2d');
-      if (context) {
-        canvas.width = 600 * scale;
-        canvas.height = 800 * scale;
-        
-        // Draw a simple mock page
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        
-        context.fillStyle = '#000000';
-        context.font = `${16 * scale}px Arial`;
-        context.fillText(`Page ${pageNumber}`, 50 * scale, 50 * scale);
-        context.fillText('Sample PDF Content', 50 * scale, 100 * scale);
-        
-        // Draw some mock content boxes
-        context.strokeStyle = '#cccccc';
-        context.strokeRect(50 * scale, 150 * scale, 500 * scale, 100 * scale);
-        context.strokeRect(50 * scale, 300 * scale, 200 * scale, 50 * scale);
-        context.strokeRect(300 * scale, 300 * scale, 250 * scale, 50 * scale);
+      // Clean up previous document
+      if (this.currentDocument) {
+        await this.cleanup();
       }
+
+      const loadingTask = pdfjsLib.getDocument({
+        data: pdfData,
+        cMapUrl: '/assets/cmaps/',
+        cMapPacked: true,
+      });
+
+      this.currentDocument = await loadingTask.promise;
+      return this.currentDocument;
     } catch (error) {
-      throw new Error(`Failed to render page ${pageNumber}: ${error}`);
+      console.error('Error loading PDF document:', error);
+      throw new Error('Failed to load PDF document');
     }
   }
 
-  private async getPageDimensionsInternal(
-    pdf: PDFDocumentProxy,
+  /**
+   * Get document information
+   */
+  getDocumentInfo(): { numPages: number } | null {
+    if (!this.currentDocument) {
+      return null;
+    }
+    return {
+      numPages: this.currentDocument.numPages
+    };
+  }
+
+  /**
+   * Render a specific page to canvas
+   */
+  async renderPage(
     pageNumber: number,
-    scale: number
-  ): Promise<PageDimensions> {
+    canvas: HTMLCanvasElement,
+    options: PdfRenderOptions = { scale: 1.0, rotation: 0 }
+  ): Promise<PdfPageInfo> {
+    if (!this.currentDocument) {
+      throw new Error('No PDF document loaded');
+    }
+
     try {
-      // Mock implementation
-      // In real implementation:
-      // const page = await pdf.getPage(pageNumber);
-      // const viewport = page.getViewport({ scale });
-      // return {
-      //   width: viewport.width,
-      //   height: viewport.height,
-      //   scale: scale
-      // };
+      // Cancel any existing render task for this page
+      const existingTask = this.renderTasks.get(pageNumber);
+      if (existingTask) {
+        existingTask.cancel();
+        this.renderTasks.delete(pageNumber);
+      }
+
+      const page = await this.currentDocument.getPage(pageNumber);
+      const viewport = page.getViewport({
+        scale: options.scale,
+        rotation: options.rotation
+      });
+
+      // Set canvas dimensions
+      const context = canvas.getContext('2d');
+      if (!context) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      // Handle high DPI displays
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      const scaledWidth = viewport.width * devicePixelRatio;
+      const scaledHeight = viewport.height * devicePixelRatio;
+
+      canvas.width = scaledWidth;
+      canvas.height = scaledHeight;
+      canvas.style.width = viewport.width + 'px';
+      canvas.style.height = viewport.height + 'px';
+
+      context.scale(devicePixelRatio, devicePixelRatio);
+
+const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+        canvas: canvas
+      };
+
+      const renderTask = page.render(renderContext);
+      this.renderTasks.set(pageNumber, renderTask);
+
+      await renderTask.promise;
+      this.renderTasks.delete(pageNumber);
 
       return {
-        width: 600 * scale,
-        height: 800 * scale,
-        scale: scale
+        pageNumber,
+        width: viewport.width,
+        height: viewport.height,
+        scale: options.scale,
+        rotation: options.rotation
       };
     } catch (error) {
-      throw new Error(`Failed to get page dimensions for page ${pageNumber}: ${error}`);
+      this.renderTasks.delete(pageNumber);
+      if (error instanceof Error && error.name === 'RenderingCancelledException') {
+        console.log(`Rendering cancelled for page ${pageNumber}`);
+        throw error;
+      }
+      console.error(`Error rendering page ${pageNumber}:`, error);
+      throw new Error(`Failed to render page ${pageNumber}`);
     }
   }
 
-  private createMockPDFDocument(): PDFDocumentProxy {
-    return {
-      numPages: 3,
-      getPage: async (pageNumber: number) => ({
-        getViewport: (options: { scale: number }) => ({
-          width: 600 * options.scale,
-          height: 800 * options.scale,
-          scale: options.scale
-        }),
-        render: (renderContext: PDFRenderContext) => ({
-          promise: Promise.resolve()
-        })
-      })
-    } as PDFDocumentProxy;
+  /**
+   * Get page dimensions without rendering
+   */
+  async getPageDimensions(pageNumber: number, scale: number = 1.0): Promise<{ width: number; height: number }> {
+    if (!this.currentDocument) {
+      throw new Error('No PDF document loaded');
+    }
+
+    try {
+      const page = await this.currentDocument.getPage(pageNumber);
+      const viewport = page.getViewport({ scale });
+      return {
+        width: viewport.width,
+        height: viewport.height
+      };
+    } catch (error) {
+      console.error(`Error getting page ${pageNumber} dimensions:`, error);
+      throw new Error(`Failed to get page ${pageNumber} dimensions`);
+    }
+  }
+
+  /**
+   * Cancel all render tasks and cleanup resources
+   */
+  async cleanup(): Promise<void> {
+    // Cancel all pending render tasks
+    for (const [pageNumber, renderTask] of this.renderTasks) {
+      try {
+        renderTask.cancel();
+      } catch (error) {
+        console.warn(`Error cancelling render task for page ${pageNumber}:`, error);
+      }
+    }
+    this.renderTasks.clear();
+
+    // Cleanup document
+    if (this.currentDocument) {
+      try {
+        await this.currentDocument.destroy();
+      } catch (error) {
+        console.warn('Error destroying PDF document:', error);
+      }
+      this.currentDocument = null;
+    }
+  }
+
+  /**
+   * Check if a document is currently loaded
+   */
+  isDocumentLoaded(): boolean {
+    return this.currentDocument !== null;
+  }
+
+  /**
+   * Get the current document
+   */
+  getCurrentDocument(): PDFDocumentProxy | null {
+    return this.currentDocument;
   }
 }
