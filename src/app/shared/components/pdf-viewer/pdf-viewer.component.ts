@@ -218,11 +218,11 @@ export interface PdfViewerState {
     }
 
     .pdf-canvas {
-      max-width: 100%;
-      max-height: 100%;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
       border-radius: 4px;
       background-color: white;
+      display: block;
+      /* Allow canvas to grow beyond container when zoomed */
     }
 
     .error-message {

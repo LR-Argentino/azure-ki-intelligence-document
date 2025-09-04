@@ -64,7 +64,7 @@ export class PdfRendererService {
   }
 
   /**
-   * Render a specific page to canvas
+   * Render a specific page to canvas with proper zoom behavior
    */
   async renderPage(
     pageNumber: number,
@@ -84,8 +84,26 @@ export class PdfRendererService {
       }
 
       const page = await this.currentDocument.getPage(pageNumber);
+      
+      // Get base viewport at scale 1.0 to determine natural dimensions
+      const baseViewport = page.getViewport({ scale: 1.0, rotation: options.rotation });
+      
+      // Calculate container constraints
+      const containerWidth = canvas.parentElement?.clientWidth || 800;
+      const containerHeight = canvas.parentElement?.clientHeight || 600;
+      
+      // Calculate the fit scale to make the page fit within container at scale 1.0
+      const fitScale = Math.min(
+        (containerWidth * 0.9) / baseViewport.width,
+        (containerHeight * 0.9) / baseViewport.height
+      );
+      
+      // Apply both fit scale and zoom scale
+      const actualScale = fitScale * options.scale;
+      
+      // Get viewport with actual scale
       const viewport = page.getViewport({
-        scale: options.scale,
+        scale: actualScale,
         rotation: options.rotation
       });
 
@@ -102,12 +120,24 @@ export class PdfRendererService {
 
       canvas.width = scaledWidth;
       canvas.height = scaledHeight;
+      
+      // Set canvas display size - this stays proportional to zoom
       canvas.style.width = viewport.width + 'px';
       canvas.style.height = viewport.height + 'px';
+      
+      // For zoom > 1.0, we want the canvas to overflow its container
+      // This creates the "zoom in" effect
+      if (options.scale > 1.0) {
+        canvas.style.maxWidth = 'none';
+        canvas.style.maxHeight = 'none';
+      } else {
+        canvas.style.maxWidth = '100%';
+        canvas.style.maxHeight = '100%';
+      }
 
       context.scale(devicePixelRatio, devicePixelRatio);
 
-const renderContext = {
+      const renderContext = {
         canvasContext: context,
         viewport: viewport,
         canvas: canvas
