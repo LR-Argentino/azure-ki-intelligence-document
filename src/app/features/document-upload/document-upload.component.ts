@@ -34,10 +34,10 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
             </span>
           </h1>
           <p class="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Transform your documents with AI-powered intelligence. Upload PDFs to extract text, 
+            Transform your documents with AI-powered intelligence. Upload PDFs to extract text,
             tables, and key insights automatically with Azure Document Intelligence.
           </p>
-          
+
           <!-- Feature highlights -->
           <div class="flex flex-wrap justify-center gap-6 mt-8">
             <div class="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
@@ -123,7 +123,7 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
           <h2 class="text-2xl font-bold text-gray-900 mb-4">Powerful Document Analysis</h2>
           <p class="text-gray-600">Leverage Azure's AI to extract insights from your documents</p>
         </div>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div class="text-center p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
             <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-xl mb-4">
@@ -134,7 +134,7 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
             <h3 class="text-lg font-semibold text-gray-900 mb-2">Text Extraction</h3>
             <p class="text-gray-600">Extract all text content with high accuracy, including handwritten text</p>
           </div>
-          
+
           <div class="text-center p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
             <div class="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-xl mb-4">
               <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
@@ -144,7 +144,7 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
             <h3 class="text-lg font-semibold text-gray-900 mb-2">Table Detection</h3>
             <p class="text-gray-600">Automatically identify and extract structured data from tables</p>
           </div>
-          
+
           <div class="text-center p-6 bg-white rounded-2xl shadow-sm border border-gray-100">
             <div class="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-xl mb-4">
               <svg class="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
@@ -221,7 +221,7 @@ export class DocumentUploadComponent {
     return new Promise((resolve) => {
       const interval = setInterval(() => {
         this.uploadProgress += 10;
-        
+
         if (this.uploadProgress >= 100) {
           clearInterval(interval);
           resolve();
@@ -290,11 +290,11 @@ export class DocumentUploadComponent {
 
   private formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }

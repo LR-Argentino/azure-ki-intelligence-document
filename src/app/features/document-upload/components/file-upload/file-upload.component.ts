@@ -25,10 +25,10 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
              (dragleave)="onDragLeave($event)"
              (drop)="onDrop($event)"
              (click)="fileInput.click()">
-          
+
           <!-- Background decoration -->
           <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-          
+
           <input #fileInput
                  type="file"
                  accept=".pdf"
@@ -53,7 +53,7 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
                 </svg>
               </div>
             </div>
-            
+
             <!-- Upload Text -->
             <div class="space-y-4">
               <h3 class="text-2xl font-bold text-gray-900">
@@ -63,7 +63,7 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
                 or <span class="text-primary-600 font-medium hover:text-primary-700 transition-colors">click to browse</span>
               </p>
             </div>
-            
+
             <!-- Upload Info -->
             <div class="flex flex-col sm:flex-row sm:justify-center sm:space-x-8 space-y-2 sm:space-y-0 text-sm text-gray-500">
               <div class="flex items-center justify-center space-x-2">
@@ -89,7 +89,7 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
 
       <!-- Error Message -->
       <div class="mt-4">
-        <app-error-message 
+        <app-error-message
           *ngIf="validationError"
           type="error"
           title="File Validation Error"
@@ -124,21 +124,21 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
                 </div>
               </div>
             </div>
-            <button (click)="removeFile()" 
+            <button (click)="removeFile()"
                     class="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"/>
               </svg>
             </button>
           </div>
-          
+
           <!-- Upload Actions -->
           <div class="flex flex-col sm:flex-row sm:justify-end space-y-3 sm:space-y-0 sm:space-x-3 pt-4 border-t border-blue-200">
-            <button (click)="removeFile()" 
+            <button (click)="removeFile()"
                     class="inline-flex justify-center items-center px-6 py-3 border border-gray-300 text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200">
               Cancel
             </button>
-            <button (click)="uploadFile()" 
+            <button (click)="uploadFile()"
                     [disabled]="!selectedFile"
                     class="inline-flex justify-center items-center px-8 py-3 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl">
               <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,7 +149,6 @@ import { ErrorMessageComponent } from '../../../../shared/components/error-messa
           </div>
         </div>
       </div>
-    </div>
   `,
   styles: []
 })
@@ -193,7 +192,7 @@ export class FileUploadComponent {
 
   private handleFile(file: File): void {
     this.clearError();
-    
+
     const validation = FileValidatorUtil.validateFile(file);
     if (!validation.isValid) {
       this.validationError = validation;

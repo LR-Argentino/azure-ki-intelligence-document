@@ -88,17 +88,17 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
   analyzeDocument(file: File, modelId?: string): Observable<ExtractionResult> {
     this.loggingService.info(`Starting document analysis: ${file.name}`, { modelId }, 'AzureIntelligenceService');
 
-    // If Azure is not configured, use mock data for development
     if (!this.isConfigured()) {
-      this.loggingService.warn('Azure service not configured, using mock data', { fileName: file.name }, 'AzureIntelligenceService');
-      return from(this.mockAnalyzeDocument(file, modelId)).pipe(
-        tap(result => {
-          this.loggingService.info(`Mock document analysis completed: ${file.name}`, result, 'AzureIntelligenceService');
-        })
+      const error = new AzureIntelligenceError(
+        AzureErrorCode.SERVICE_NOT_CONFIGURED,
+        'Azure Document Intelligence service is not properly configured',
+        undefined,
+        { fileName: file.name, modelId }
       );
+      this.loggingService.error('Service not configured', error, 'AzureIntelligenceService');
+      return throwError(() => error);
     }
 
-    // Try to use real Azure API, fall back to mock on error
     const model = modelId || 'prebuilt-layout';
     
     return from(this.analyzeDocumentWithAzure(file, model)).pipe(
@@ -109,12 +109,18 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
           return of(null).pipe(delay(2000 * retryCount));
         }
       }),
-      catchError(error => {
-        this.loggingService.warn('Azure API failed, falling back to mock data', error, 'AzureIntelligenceService');
-        return from(this.mockAnalyzeDocument(file, modelId));
-      }),
       tap(result => {
         this.loggingService.info(`Document analysis completed: ${file.name}`, result, 'AzureIntelligenceService');
+      }),
+      catchError(error => {
+        const serviceError = new AzureIntelligenceError(
+          AzureErrorCode.ANALYSIS_FAILED,
+          `Failed to analyze document: ${file.name}`,
+          error,
+          { fileName: file.name, modelId: model }
+        );
+        this.loggingService.error('Document analysis failed', serviceError, 'AzureIntelligenceService');
+        return throwError(() => serviceError);
       })
     );
   }
@@ -126,14 +132,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.analyzeDocument(file, 'prebuilt-invoice').pipe(
       map(result => ({
         ...result,
-        invoiceData: {
-          vendorName: 'Sample Vendor',
-          customerName: 'Sample Customer',
-          invoiceId: 'INV-001',
-          invoiceDate: '2024-01-15',
-          totalAmount: 1234.56,
-          currency: 'USD'
-        }
+        invoiceData: this.extractInvoiceData(result.analyzeResult)
       }))
     );
   }
@@ -142,13 +141,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.analyzeDocument(file, 'prebuilt-contract').pipe(
       map(result => ({
         ...result,
-        contractData: {
-          parties: ['Party A', 'Party B'],
-          effectiveDate: '2024-01-01',
-          expirationDate: '2024-12-31',
-          contractType: 'Service Agreement',
-          keyTerms: ['Payment terms', 'Termination Clause', 'Confidentiality']
-        }
+        contractData: this.extractContractData(result.analyzeResult)
       }))
     );
   }
@@ -157,12 +150,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.analyzeDocument(file, 'prebuilt-layout').pipe(
       map(result => ({
         ...result,
-        layoutData: {
-          pageCount: 1,
-          hasImages: false,
-          hasTables: true,
-          textDensity: 0.75
-        }
+        layoutData: this.extractLayoutData(result.analyzeResult)
       }))
     );
   }
@@ -277,33 +265,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     }
   }
 
-  /**
-   * Mock document analysis for development/fallback
-   * @param file The file to analyze
-   * @param modelId The model ID to use
-   * @returns Promise with mock extraction result
-   */
-  private async mockAnalyzeDocument(file: File, modelId?: string): Promise<ExtractionResult> {
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
 
-    const documentType = this.determineDocumentTypeFromFileName(file.name);
-    
-    return {
-      status: 'succeeded',
-      createdDateTime: new Date().toISOString(),
-      lastUpdatedDateTime: new Date().toISOString(),
-      analyzeResult: {
-        apiVersion: '2024-02-29-preview',
-        modelId: modelId || 'prebuilt-layout',
-        stringIndexType: 'textElements',
-        content: this.generateMockContent(documentType),
-        pages: this.generateMockPages(),
-        tables: this.generateMockTables(documentType),
-        keyValuePairs: this.generateMockKeyValuePairs(documentType)
-      }
-    };
-  }
 
   /**
    * Poll operation until complete
@@ -463,154 +425,116 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
   }
 
   /**
-   * Determine document type from file name for mock data
+   * Extract invoice-specific data from Azure result
    */
-  private determineDocumentTypeFromFileName(fileName: string): DocumentType {
-    const name = fileName.toLowerCase();
+  private extractInvoiceData(analyzeResult: any): any {
+    // Extract invoice data from Azure Document Intelligence result
+    // This would parse the actual Azure response for invoice fields
+    const documents = analyzeResult.documents || [];
+    const invoiceDoc = documents.find((doc: any) => doc.docType === 'invoice') || documents[0];
     
-    if (name.includes('invoice') || name.includes('rechnung') || name.includes('bill')) {
-      return DocumentType.INVOICE;
-    } else if (name.includes('contract') || name.includes('vertrag') || name.includes('agreement')) {
-      return DocumentType.CONTRACT;
-    } else {
-      return DocumentType.LAYOUT;
+    if (!invoiceDoc) {
+      throw new Error('No invoice document found in analysis result');
     }
+
+    const fields = invoiceDoc.fields || {};
+    
+    return {
+      vendorName: fields.VendorName?.content || fields.VendorAddress?.content || 'Unknown Vendor',
+      customerName: fields.CustomerName?.content || fields.CustomerAddress?.content || 'Unknown Customer',
+      invoiceId: fields.InvoiceId?.content || fields.InvoiceNumber?.content || 'Unknown',
+      invoiceDate: fields.InvoiceDate?.content || new Date().toISOString().split('T')[0],
+      totalAmount: parseFloat(fields.InvoiceTotal?.content || fields.TotalAmount?.content || '0'),
+      currency: fields.Currency?.content || 'USD'
+    };
   }
 
   /**
-   * Generate mock content based on document type
+   * Extract contract-specific data from Azure result
    */
-  private generateMockContent(documentType: DocumentType): string {
-    switch (documentType) {
-      case DocumentType.INVOICE:
-        return `INVOICE
-
-Invoice Number: INV-2024-001
-Date: ${new Date().toLocaleDateString()}
-
-Bill To:
-John Doe
-123 Main Street
-Anytown, ST 12345
-
-Description                 Qty    Price    Total
-Web Development Services     1    $2,500   $2,500
-Hosting Setup               1      $150     $150
-
-Subtotal:                                  $2,650
-Tax (8%):                                   $212
-Total:                                    $2,862`;
-
-      case DocumentType.CONTRACT:
-        return `SERVICE AGREEMENT
-
-This Service Agreement ("Agreement") is entered into on ${new Date().toLocaleDateString()}
-
-PARTIES:
-Client: ABC Corporation
-Service Provider: XYZ Services LLC
-
-SCOPE OF WORK:
-The Service Provider agrees to provide web development services including:
-- Frontend development
-- Backend API development
-- Database design and implementation
-
-TERMS:
-Duration: 6 months
-Payment: $5,000 per month
-Start Date: ${new Date().toLocaleDateString()}
-
-SIGNATURES:
-Client: _________________
-Service Provider: _________________`;
-
-      default:
-        return `DOCUMENT CONTENT
-
-This is a sample document with various text elements.
-
-Header Section
-This document contains multiple paragraphs and sections.
-
-Main Content
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
-Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-
-Footer Section
-Document processed on ${new Date().toLocaleDateString()}`;
+  private extractContractData(analyzeResult: any): any {
+    // Extract contract data from Azure Document Intelligence result
+    const documents = analyzeResult.documents || [];
+    const contractDoc = documents.find((doc: any) => doc.docType === 'contract') || documents[0];
+    
+    if (!contractDoc) {
+      throw new Error('No contract document found in analysis result');
     }
+
+    const fields = contractDoc.fields || {};
+    
+    return {
+      parties: this.extractParties(fields),
+      effectiveDate: fields.EffectiveDate?.content || fields.StartDate?.content || 'Unknown',
+      expirationDate: fields.ExpirationDate?.content || fields.EndDate?.content || 'Unknown',
+      contractType: fields.ContractType?.content || 'Unknown Agreement',
+      keyTerms: this.extractKeyTerms(analyzeResult.content || '')
+    };
   }
 
   /**
-   * Generate mock pages
+   * Extract layout-specific data from Azure result
    */
-  private generateMockPages(): any[] {
-    return [
-      {
-        pageNumber: 1,
-        text: 'Page 1 content with various text elements',
-        tables: [],
-        keyValuePairs: []
-      }
+  private extractLayoutData(analyzeResult: any): any {
+    const pages = analyzeResult.pages || [];
+    const tables = analyzeResult.tables || [];
+    
+    return {
+      pageCount: pages.length,
+      hasImages: pages.some((page: any) => page.images && page.images.length > 0),
+      hasTables: tables.length > 0,
+      textDensity: this.calculateTextDensity(analyzeResult.content || '')
+    };
+  }
+
+  /**
+   * Extract parties from contract fields
+   */
+  private extractParties(fields: any): string[] {
+    const parties: string[] = [];
+    
+    if (fields.Parties?.valueArray) {
+      return fields.Parties.valueArray.map((party: any) => party.content || 'Unknown Party');
+    }
+    
+    // Fallback: look for common party field names
+    if (fields.Party1?.content) parties.push(fields.Party1.content);
+    if (fields.Party2?.content) parties.push(fields.Party2.content);
+    if (fields.Client?.content) parties.push(fields.Client.content);
+    if (fields.Vendor?.content) parties.push(fields.Vendor.content);
+    
+    return parties.length > 0 ? parties : ['Unknown Party A', 'Unknown Party B'];
+  }
+
+  /**
+   * Extract key terms from contract content
+   */
+  private extractKeyTerms(content: string): string[] {
+    const terms: string[] = [];
+    const commonTerms = [
+      'payment', 'termination', 'confidentiality', 'liability', 'warranty',
+      'intellectual property', 'force majeure', 'governing law', 'dispute resolution'
     ];
+    
+    const lowerContent = content.toLowerCase();
+    commonTerms.forEach(term => {
+      if (lowerContent.includes(term)) {
+        terms.push(term.charAt(0).toUpperCase() + term.slice(1));
+      }
+    });
+    
+    return terms.length > 0 ? terms : ['Standard Terms'];
   }
 
   /**
-   * Generate mock tables based on document type
+   * Calculate text density for layout analysis
    */
-  private generateMockTables(documentType: DocumentType): any[] {
-    if (documentType === DocumentType.INVOICE) {
-      return [
-        {
-          rowCount: 3,
-          columnCount: 4,
-          cells: [
-            { rowIndex: 0, columnIndex: 0, text: 'Description', confidence: 0.99 },
-            { rowIndex: 0, columnIndex: 1, text: 'Qty', confidence: 0.99 },
-            { rowIndex: 0, columnIndex: 2, text: 'Price', confidence: 0.99 },
-            { rowIndex: 0, columnIndex: 3, text: 'Total', confidence: 0.99 },
-            { rowIndex: 1, columnIndex: 0, text: 'Web Development', confidence: 0.95 },
-            { rowIndex: 1, columnIndex: 1, text: '1', confidence: 0.98 },
-            { rowIndex: 1, columnIndex: 2, text: '$2,500', confidence: 0.97 },
-            { rowIndex: 1, columnIndex: 3, text: '$2,500', confidence: 0.97 },
-            { rowIndex: 2, columnIndex: 0, text: 'Hosting Setup', confidence: 0.94 },
-            { rowIndex: 2, columnIndex: 1, text: '1', confidence: 0.98 },
-            { rowIndex: 2, columnIndex: 2, text: '$150', confidence: 0.96 },
-            { rowIndex: 2, columnIndex: 3, text: '$150', confidence: 0.96 }
-          ]
-        }
-      ];
-    }
-    return [];
-  }
-
-  /**
-   * Generate mock key-value pairs based on document type
-   */
-  private generateMockKeyValuePairs(documentType: DocumentType): any[] {
-    switch (documentType) {
-      case DocumentType.INVOICE:
-        return [
-          { key: 'Invoice Number', value: 'INV-2024-001', confidence: 0.98 },
-          { key: 'Date', value: new Date().toLocaleDateString(), confidence: 0.97 },
-          { key: 'Total', value: '$2,862', confidence: 0.99 },
-          { key: 'Tax', value: '$212', confidence: 0.96 }
-        ];
-
-      case DocumentType.CONTRACT:
-        return [
-          { key: 'Agreement Type', value: 'Service Agreement', confidence: 0.98 },
-          { key: 'Duration', value: '6 months', confidence: 0.95 },
-          { key: 'Monthly Payment', value: '$5,000', confidence: 0.97 },
-          { key: 'Start Date', value: new Date().toLocaleDateString(), confidence: 0.96 }
-        ];
-
-      default:
-        return [
-          { key: 'Document Type', value: 'General Document', confidence: 0.90 },
-          { key: 'Processed Date', value: new Date().toLocaleDateString(), confidence: 0.99 }
-        ];
-    }
+  private calculateTextDensity(content: string): number {
+    if (!content) return 0;
+    
+    const totalChars = content.length;
+    const nonWhitespaceChars = content.replace(/\s/g, '').length;
+    
+    return totalChars > 0 ? nonWhitespaceChars / totalChars : 0;
   }
 }
