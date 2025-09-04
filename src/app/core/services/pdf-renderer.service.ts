@@ -37,8 +37,11 @@ export class PdfRendererService {
         await this.cleanup();
       }
 
+      // Clone the ArrayBuffer to prevent detachment issues
+      const clonedData = pdfData.slice(0);
+
       const loadingTask = pdfjsLib.getDocument({
-        data: pdfData,
+        data: clonedData,
         cMapUrl: '/assets/cmaps/',
         cMapPacked: true,
       });
@@ -88,18 +91,20 @@ export class PdfRendererService {
       // Get base viewport at scale 1.0 to determine natural dimensions
       const baseViewport = page.getViewport({ scale: 1.0, rotation: options.rotation });
       
-      // Calculate container constraints
-      const containerWidth = canvas.parentElement?.clientWidth || 800;
-      const containerHeight = canvas.parentElement?.clientHeight || 600;
+      // Calculate container constraints with more generous defaults
+      const containerWidth = canvas.parentElement?.clientWidth || 1000;
+      const containerHeight = canvas.parentElement?.clientHeight || 800;
       
       // Calculate the fit scale to make the page fit within container at scale 1.0
-      const fitScale = Math.min(
-        (containerWidth * 0.9) / baseViewport.width,
-        (containerHeight * 0.9) / baseViewport.height
-      );
+      const fitScaleWidth = (containerWidth * 0.95) / baseViewport.width;
+      const fitScaleHeight = (containerHeight * 0.95) / baseViewport.height;
+      const fitScale = Math.min(fitScaleWidth, fitScaleHeight);
+      
+      // Ensure minimum readable size
+      const minScale = Math.max(fitScale, 0.8);
       
       // Apply both fit scale and zoom scale
-      const actualScale = fitScale * options.scale;
+      const actualScale = minScale * options.scale;
       
       // Get viewport with actual scale
       const viewport = page.getViewport({
@@ -185,6 +190,22 @@ export class PdfRendererService {
     } catch (error) {
       console.error(`Error getting page ${pageNumber} dimensions:`, error);
       throw new Error(`Failed to get page ${pageNumber} dimensions`);
+    }
+  }
+  
+  /**
+   * Get a specific page proxy for advanced operations
+   */
+  async getPage(pageNumber: number): Promise<PDFPageProxy | null> {
+    if (!this.currentDocument) {
+      return null;
+    }
+    
+    try {
+      return await this.currentDocument.getPage(pageNumber);
+    } catch (error) {
+      console.error(`Error getting page ${pageNumber}:`, error);
+      return null;
     }
   }
 

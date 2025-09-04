@@ -19,8 +19,8 @@ export class CoordinateConverterUtil {
     
     // Convert polygon points (x1, y1, x2, y2, x3, y3, x4, y4) to canvas coordinates
     for (let i = 0; i < polygon.length; i += 2) {
-      const x = (polygon[i] / pageDimensions.width) * canvasWidth;
-      const y = (polygon[i + 1] / pageDimensions.height) * canvasHeight;
+      const x = (polygon[i] / pageDimensions.width) * canvasWidth * pageDimensions.scale;
+      const y = (polygon[i + 1] / pageDimensions.height) * canvasHeight * pageDimensions.scale;
       points.push({ x, y });
     }
 
@@ -120,5 +120,92 @@ export class CoordinateConverterUtil {
    */
   static getBoundingBoxArea(boundingBox: CanvasCoordinates): number {
     return boundingBox.width * boundingBox.height;
+  }
+
+  /**
+   * Convert screen/client coordinates to canvas coordinates
+   * Taking into account canvas offset and scroll position
+   */
+  static screenToCanvas(
+    screenX: number,
+    screenY: number,
+    canvasElement: HTMLCanvasElement
+  ): Point {
+    const rect = canvasElement.getBoundingClientRect();
+    
+    return {
+      x: screenX - rect.left,
+      y: screenY - rect.top
+    };
+  }
+
+  /**
+   * Check if a point is inside a polygon using ray casting algorithm
+   */
+  static isPointInPolygon(point: Point, polygon: Point[]): boolean {
+    let isInside = false;
+    const x = point.x;
+    const y = point.y;
+
+    let j = polygon.length - 1;
+    for (let i = 0; i < polygon.length; i++) {
+      if (
+        (polygon[i].y > y) !== (polygon[j].y > y) &&
+        x < ((polygon[j].x - polygon[i].x) * (y - polygon[i].y)) / (polygon[j].y - polygon[i].y) + polygon[i].x
+      ) {
+        isInside = !isInside;
+      }
+      j = i;
+    }
+
+    return isInside;
+  }
+
+  /**
+   * Calculate distance between two points
+   */
+  static getDistance(point1: Point, point2: Point): number {
+    const dx = point2.x - point1.x;
+    const dy = point2.y - point1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * Clamp coordinates to canvas bounds
+   */
+  static clampToCanvas(
+    point: Point,
+    canvasWidth: number,
+    canvasHeight: number
+  ): Point {
+    return {
+      x: Math.max(0, Math.min(canvasWidth, point.x)),
+      y: Math.max(0, Math.min(canvasHeight, point.y))
+    };
+  }
+
+  /**
+   * Convert polygon array to Point array
+   */
+  static polygonToPoints(polygon: number[]): Point[] {
+    const points: Point[] = [];
+    for (let i = 0; i < polygon.length; i += 2) {
+      points.push({
+        x: polygon[i],
+        y: polygon[i + 1]
+      });
+    }
+    return points;
+  }
+
+  /**
+   * Convert Point array to polygon array
+   */
+  static pointsToPolygon(points: Point[]): number[] {
+    const polygon: number[] = [];
+    points.forEach(point => {
+      polygon.push(point.x, point.y);
+    });
+    return polygon;
   }
 }

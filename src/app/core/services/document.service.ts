@@ -1,10 +1,11 @@
 import { Injectable, signal } from '@angular/core';
 import { Observable, from, of, throwError } from 'rxjs';
-import { map, catchError, tap, retry, delay } from 'rxjs/operators';
+import { map, catchError, tap, retry, delay, switchMap } from 'rxjs/operators';
 import { Document, ProcessingStatus, DocumentType } from '../models/document.model';
 import { IDocumentService } from '../interfaces/document-service.interface';
 import { DocumentServiceError, DocumentErrorCode, ErrorHandler } from '../errors/service-errors';
 import { LoggingService } from './logging.service';
+import { AzureIntelligenceService } from './azure-intelligence.service';
 
 /**
  * Service for managing document operations with Signal-based state management
@@ -21,7 +22,10 @@ export class DocumentService implements IDocumentService {
   readonly documentsSignal = this.documents.asReadonly();
   readonly currentDocumentSignal = this.currentDocument.asReadonly();
 
-  constructor(private loggingService: LoggingService) {
+  constructor(
+    private loggingService: LoggingService,
+    private azureIntelligenceService: AzureIntelligenceService
+  ) {
     this.loggingService.info('DocumentService initialized', undefined, 'DocumentService');
   }
 
@@ -50,13 +54,30 @@ export class DocumentService implements IDocumentService {
       this.documents.update(docs => [...docs, document]);
       this.loggingService.info(`Document added to collection: ${document.id}`, document, 'DocumentService');
 
-      // Process file with retry logic
-      return from(this.processFile(file, document)).pipe(
+      // Process file with Azure Intelligence Service
+      return from(file.arrayBuffer()).pipe(
+        switchMap(arrayBuffer => {
+          // Store PDF data immediately
+          document.pdfData = arrayBuffer;
+          document.status = ProcessingStatus.PROCESSING;
+          this.updateDocument(document);
+          
+          // Analyze document with Azure Intelligence Service
+          const modelId = this.getModelIdForDocumentType(document.type);
+          return this.azureIntelligenceService.analyzeDocument(file, modelId).pipe(
+            map(extractionResult => {
+              // Update document with extraction result
+              document.extractionResult = extractionResult;
+              document.status = ProcessingStatus.COMPLETED;
+              return document;
+            })
+          );
+        }),
         retry({
-          count: 3,
+          count: 2,
           delay: (error, retryCount) => {
             this.loggingService.warn(`Upload attempt ${retryCount} failed, retrying...`, error, 'DocumentService');
-            return of(null).pipe(delay(1000 * retryCount));
+            return of(null).pipe(delay(2000 * retryCount));
           }
         }),
         tap(processedDoc => {
@@ -313,21 +334,17 @@ export class DocumentService implements IDocumentService {
     return DocumentType.LAYOUT;
   }
 
-  private async processFile(file: File, document: Document): Promise<Document> {
-    // Convert file to ArrayBuffer
-    const arrayBuffer = await file.arrayBuffer();
-    
-    // Update document status
-    document.status = ProcessingStatus.PROCESSING;
-    document.pdfData = arrayBuffer;
-    
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Update status to completed
-    document.status = ProcessingStatus.COMPLETED;
-    
-    return document;
+  private getModelIdForDocumentType(documentType: DocumentType): string {
+    switch (documentType) {
+      case DocumentType.INVOICE:
+        return 'prebuilt-invoice';
+      case DocumentType.CONTRACT:
+        return 'prebuilt-contract';
+      case DocumentType.RECEIPT:
+        return 'prebuilt-receipt';
+      default:
+        return 'prebuilt-layout';
+    }
   }
 
 

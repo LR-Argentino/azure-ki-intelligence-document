@@ -3,6 +3,8 @@ import {
   Input,
   OnInit,
   OnDestroy,
+  OnChanges,
+  SimpleChanges,
   ViewChild,
   ElementRef,
   ChangeDetectorRef,
@@ -12,6 +14,10 @@ import {
 import { CommonModule } from '@angular/common';
 import { PdfRendererService, PdfPageInfo } from '../../../core/services/pdf-renderer.service';
 import { LoadingSpinnerComponent } from '../loading-spinner/loading-spinner.component';
+import { BoundingBoxOverlayComponent } from '../bounding-box-overlay/bounding-box-overlay.component';
+import { BoundingBox, BoundingBoxType, BoundingBoxInteraction, OverlaySettings } from '../../../core/models/bounding-box.model';
+import { BoundingBoxService } from '../../../core/services/bounding-box.service';
+import { ExtractionResult } from '../../../core/models/document.model';
 
 export interface PdfViewerState {
   currentPage: number;
@@ -24,7 +30,7 @@ export interface PdfViewerState {
 @Component({
   selector: 'app-pdf-viewer',
   standalone: true,
-  imports: [CommonModule, LoadingSpinnerComponent],
+  imports: [CommonModule, LoadingSpinnerComponent, BoundingBoxOverlayComponent],
   template: `
     <div class="pdf-viewer-container">
       <!-- PDF Viewer Controls -->
@@ -89,6 +95,29 @@ export interface PdfViewerState {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
           </button>
+          
+          <button
+            class="control-btn"
+            [disabled]="state.isLoading"
+            (click)="fitToWidth()"
+            title="Fit to width">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+            </svg>
+          </button>
+          
+          <div class="controls-separator"></div>
+          
+          <button
+            *ngIf="extractionResult"
+            class="control-btn"
+            [class.active]="showBoundingBoxes"
+            (click)="toggleBoundingBoxes()"
+            title="Toggle bounding boxes">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -116,11 +145,28 @@ export interface PdfViewerState {
           </button>
         </div>
 
-        <canvas
-          #pdfCanvas
-          class="pdf-canvas"
-          [style.display]="state.error ? 'none' : 'block'">
-        </canvas>
+        <div class="pdf-canvas-wrapper" [style.position]="'relative'">
+          <canvas
+            #pdfCanvas
+            class="pdf-canvas"
+            [style.display]="state.error ? 'none' : 'block'">
+          </canvas>
+          
+          <!-- Bounding Box Overlay -->
+          <app-bounding-box-overlay
+            *ngIf="extractionResult && showBoundingBoxes && !state.error && !state.isLoading"
+            [boundingBoxes]="currentPageBoundingBoxes"
+            [canvasWidth]="canvasWidth"
+            [canvasHeight]="canvasHeight"
+            [overlaySettings]="overlaySettings"
+            [selectedBoxId]="selectedBoxId"
+            [highlightedBoxId]="highlightedBoxId"
+            (boxClick)="onBoundingBoxClick($event)"
+            (boxHover)="onBoundingBoxHover($event)"
+            (boxSelect)="onBoundingBoxSelect($event)"
+            (boxDeselect)="onBoundingBoxDeselect()">
+          </app-bounding-box-overlay>
+        </div>
       </div>
     </div>
   `,
@@ -175,6 +221,19 @@ export interface PdfViewerState {
       opacity: 0.5;
       cursor: not-allowed;
     }
+    
+    .control-btn.active {
+      background-color: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+    
+    .controls-separator {
+      width: 1px;
+      height: 20px;
+      background-color: #cbd5e1;
+      margin: 0 8px;
+    }
 
     .page-info {
       display: flex;
@@ -206,11 +265,12 @@ export interface PdfViewerState {
     .pdf-canvas-container {
       flex: 1;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       padding: 20px;
       overflow: auto;
       position: relative;
+      min-height: 500px;
     }
 
     .pdf-canvas-container.loading {
@@ -310,24 +370,48 @@ export interface PdfViewerState {
     }
   `]
 })
-export class PdfViewerComponent implements OnInit, OnDestroy {
+export class PdfViewerComponent implements OnInit, OnDestroy, OnChanges {
   @Input() pdfData: ArrayBuffer | null = null;
+  @Input() extractionResult: ExtractionResult | null = null;
+  @Input() showBoundingBoxes: boolean = true;
+  @Input() selectedBoxId: string | null = null;
+  @Input() highlightedBoxId: string | null = null;
+  @Input() overlaySettings: OverlaySettings = {
+    showWords: false,
+    showLines: true,
+    showTables: true,
+    showKeyValuePairs: true,
+    showDocumentFields: true,
+    opacity: 0.3,
+    highlightColor: '#3b82f6',
+    selectedColor: '#ef4444'
+  };
+  
   @Output() stateChange = new EventEmitter<PdfViewerState>();
   @Output() pageRendered = new EventEmitter<PdfPageInfo>();
+  @Output() boundingBoxClick = new EventEmitter<BoundingBoxInteraction>();
+  @Output() boundingBoxHover = new EventEmitter<BoundingBoxInteraction>();
+  @Output() boundingBoxSelect = new EventEmitter<BoundingBox>();
 
   @ViewChild('pdfCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
   state: PdfViewerState = {
     currentPage: 1,
     totalPages: 0,
-    scale: 1.0,
+    scale: 1.5, // Start with a larger default scale
     isLoading: false,
     error: null
   };
+  
+  // Bounding box related properties
+  currentPageBoundingBoxes: BoundingBox[] = [];
+  canvasWidth: number = 0;
+  canvasHeight: number = 0;
 
   constructor(
     private pdfRenderer: PdfRendererService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private boundingBoxService: BoundingBoxService
   ) {}
 
   ngOnInit(): void {
@@ -335,9 +419,23 @@ export class PdfViewerComponent implements OnInit, OnDestroy {
       this.loadPdf();
     }
   }
+  
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['pdfData'] && changes['pdfData'].currentValue && !changes['pdfData'].isFirstChange()) {
+      this.loadPdf();
+    }
+    
+    // Handle changes to selection/highlight inputs
+    if (changes['selectedBoxId'] || changes['highlightedBoxId']) {
+      // Trigger change detection for the bounding box overlay component
+      this.cdr.detectChanges();
+    }
+  }
 
   ngOnDestroy(): void {
-    this.cleanup();
+    this.cleanup().catch(error => {
+      console.warn('Error during component cleanup:', error);
+    });
   }
 
   async loadPdf(): Promise<void> {
@@ -346,9 +444,17 @@ export class PdfViewerComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Ensure we clean up any existing document first
+    await this.cleanup();
+    
     this.setState({ isLoading: true, error: null });
 
     try {
+      // Verify the ArrayBuffer is valid
+      if (this.pdfData.byteLength === 0) {
+        throw new Error('PDF data is empty');
+      }
+      
       const document = await this.pdfRenderer.loadDocument(this.pdfData);
       const docInfo = this.pdfRenderer.getDocumentInfo();
 
@@ -358,12 +464,26 @@ export class PdfViewerComponent implements OnInit, OnDestroy {
           currentPage: 1,
           isLoading: false
         });
+        
+        // Calculate optimal scale for first render
+        await this.calculateOptimalScale();
+        
         await this.renderCurrentPage();
       }
     } catch (error) {
       console.error('Error loading PDF:', error);
+      let errorMessage = 'Failed to load PDF';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('DataCloneError') || error.message.includes('detached')) {
+          errorMessage = 'PDF data is no longer available. Please try uploading the file again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       this.setState({
-        error: error instanceof Error ? error.message : 'Failed to load PDF',
+        error: errorMessage,
         isLoading: false
       });
     }
@@ -384,6 +504,13 @@ export class PdfViewerComponent implements OnInit, OnDestroy {
       );
 
       this.setState({ isLoading: false });
+      
+      // Update canvas dimensions
+      this.updateCanvasDimensions();
+      
+      // Update bounding boxes for current page
+      this.updateCurrentPageBoundingBoxes();
+      
       this.pageRendered.emit(pageInfo);
     } catch (error) {
       console.error('Error rendering page:', error);
@@ -439,6 +566,40 @@ export class PdfViewerComponent implements OnInit, OnDestroy {
       await this.renderCurrentPage();
     }
   }
+  
+  async fitToWidth(): Promise<void> {
+    if (!this.state.isLoading) {
+      await this.calculateOptimalScale();
+      await this.renderCurrentPage();
+    }
+  }
+  
+  private async calculateOptimalScale(): Promise<void> {
+    try {
+      const page = await this.pdfRenderer.getPage(this.state.currentPage);
+      if (!page) return;
+      
+      const viewport = page.getViewport({ scale: 1 });
+      const container = this.canvasRef.nativeElement.parentElement;
+      
+      if (container) {
+        const containerWidth = container.clientWidth - 40; // Account for padding
+        const containerHeight = container.clientHeight - 40;
+        
+        // Calculate scale to fit width with some margin
+        const scaleToFitWidth = containerWidth / viewport.width;
+        const scaleToFitHeight = containerHeight / viewport.height;
+        
+        // Use the smaller scale to ensure it fits in both dimensions
+        const optimalScale = Math.min(scaleToFitWidth, scaleToFitHeight, 2.5); // Cap at 2.5x
+        const finalScale = Math.max(optimalScale, 0.5); // Minimum 0.5x
+        
+        this.setState({ scale: finalScale });
+      }
+    } catch (error) {
+      console.warn('Could not calculate optimal scale:', error);
+    }
+  }
 
   async retryRender(): Promise<void> {
     await this.renderCurrentPage();
@@ -455,6 +616,58 @@ export class PdfViewerComponent implements OnInit, OnDestroy {
       await this.pdfRenderer.cleanup();
     } catch (error) {
       console.warn('Error during PDF viewer cleanup:', error);
+    }
+  }
+  
+  // Bounding box methods
+  toggleBoundingBoxes(): void {
+    this.showBoundingBoxes = !this.showBoundingBoxes;
+  }
+  
+  onBoundingBoxClick(interaction: BoundingBoxInteraction): void {
+    this.boundingBoxClick.emit(interaction);
+  }
+  
+  onBoundingBoxHover(interaction: BoundingBoxInteraction): void {
+    this.boundingBoxHover.emit(interaction);
+  }
+  
+  onBoundingBoxSelect(box: BoundingBox): void {
+    this.boundingBoxSelect.emit(box);
+  }
+  
+  onBoundingBoxDeselect(): void {
+    // Emit null box to indicate deselection
+    const nullBox: BoundingBox = {
+      id: '',
+      polygon: [],
+      content: '',
+      confidence: 0,
+      type: BoundingBoxType.WORD,
+      pageNumber: this.state.currentPage
+    };
+    this.boundingBoxSelect.emit(nullBox);
+  }
+  
+  private updateCanvasDimensions(): void {
+    if (this.canvasRef?.nativeElement) {
+      const canvas = this.canvasRef.nativeElement;
+      this.canvasWidth = canvas.width;
+      this.canvasHeight = canvas.height;
+    }
+  }
+  
+  private updateCurrentPageBoundingBoxes(): void {
+    if (this.extractionResult) {
+      this.currentPageBoundingBoxes = this.boundingBoxService.createBoundingBoxes(
+        this.extractionResult,
+        this.state.currentPage,
+        this.canvasWidth,
+        this.canvasHeight,
+        this.state.scale
+      );
+    } else {
+      this.currentPageBoundingBoxes = [];
     }
   }
 

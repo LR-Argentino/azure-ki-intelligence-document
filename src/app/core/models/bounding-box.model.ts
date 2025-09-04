@@ -59,4 +59,5 @@ export interface OverlaySettings {
   opacity: number;
   highlightColor: string;
   selectedColor: string;
+  showConfidence?: boolean;
 }

@@ -7,11 +7,13 @@ import { LoadingSpinnerComponent } from '../../shared/components/loading-spinner
 import { ErrorMessageComponent } from '../../shared/components/error-message/error-message.component';
 import { PdfViewerComponent, PdfViewerState } from '../../shared/components/pdf-viewer/pdf-viewer.component';
 import { PdfPageInfo } from '../../core/services/pdf-renderer.service';
+import { BoundingBox, BoundingBoxInteraction } from '../../core/models/bounding-box.model';
+import { ExtractionResultsComponent, ExtractedField } from '../../shared/components/extraction-results/extraction-results.component';
 
 @Component({
   selector: 'app-document-viewer',
   standalone: true,
-  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, ErrorMessageComponent, PdfViewerComponent],
+  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, ErrorMessageComponent, PdfViewerComponent, ExtractionResultsComponent],
   template: `
     <div class="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
       <!-- Modern Header -->
@@ -82,13 +84,54 @@ import { PdfPageInfo } from '../../core/services/pdf-renderer.service';
         </app-error-message>
 
         <div *ngIf="currentDocument && !isLoading && !errorMessage" class="document-content">
-          <!-- PDF Viewer -->
-          <div *ngIf="currentDocument.pdfData" class="pdf-viewer-wrapper">
-            <app-pdf-viewer 
-              [pdfData]="currentDocument.pdfData"
-              (stateChange)="onPdfViewerStateChange($event)"
-              (pageRendered)="onPageRendered($event)">
-            </app-pdf-viewer>
+          <!-- Two-panel layout: PDF Viewer + Extraction Results -->
+          <div class="document-panels" [class.single-panel]="!showExtractionPanel">
+            <!-- PDF Viewer Panel -->
+            <div class="pdf-panel" [class.full-width]="!showExtractionPanel">
+              <div class="panel-header">
+                <h3 class="panel-title">Document View</h3>
+                <button 
+                  class="toggle-panel-btn"
+                  (click)="toggleExtractionPanel()"
+                  [title]="showExtractionPanel ? 'Hide extraction results' : 'Show extraction results'">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          [attr.d]="showExtractionPanel ? 'M9 5l7 7-7 7' : 'M15 19l-7-7 7-7'"/>
+                  </svg>
+                  {{ showExtractionPanel ? 'Hide Results' : 'Show Results' }}
+                </button>
+              </div>
+              
+              <div *ngIf="currentDocument.pdfData" class="pdf-viewer-wrapper">
+                <app-pdf-viewer 
+                  [pdfData]="currentDocument.pdfData"
+                  [extractionResult]="currentDocument.extractionResult || null"
+                  [selectedBoxId]="selectedBoundingBoxId"
+                  [highlightedBoxId]="highlightedBoundingBoxId"
+                  (stateChange)="onPdfViewerStateChange($event)"
+                  (pageRendered)="onPageRendered($event)"
+                  (boundingBoxClick)="onBoundingBoxClick($event)"
+                  (boundingBoxHover)="onBoundingBoxHover($event)"
+                  (boundingBoxSelect)="onBoundingBoxSelect($event)">
+                </app-pdf-viewer>
+              </div>
+            </div>
+            
+            <!-- Extraction Results Panel -->
+            <div class="extraction-panel" *ngIf="showExtractionPanel">
+              <div class="panel-header">
+                <h3 class="panel-title">Extraction Results</h3>
+              </div>
+              
+              <app-extraction-results
+                [extractionResult]="currentDocument.extractionResult || null"
+                [selectedFieldId]="selectedFieldId"
+                [highlightedFieldId]="highlightedFieldId"
+                (fieldSelected)="onFieldSelected($event)"
+                (fieldHighlighted)="onFieldHighlighted($event)"
+                (exportRequested)="onExportRequested($event)">
+              </app-extraction-results>
+            </div>
           </div>
           
           <!-- Fallback for documents without PDF data -->
@@ -229,16 +272,96 @@ import { PdfPageInfo } from '../../core/services/pdf-renderer.service';
     }
 
     .document-content {
-      height: calc(100vh - 200px);
+      height: calc(100vh - 180px);
       background-color: #ffffff;
       border-radius: 8px;
       border: 1px solid #e5e7eb;
       overflow: hidden;
     }
+    
+    /* Two-panel layout styles */
+    .document-panels {
+      display: flex;
+      height: 100%;
+      gap: 1px; /* Small gap between panels */
+      background: #e5e7eb; /* Shows as border between panels */
+    }
+    
+    .document-panels.single-panel {
+      .pdf-panel {
+        width: 100%;
+      }
+    }
+    
+    .pdf-panel {
+      background: white;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .pdf-panel.full-width {
+      width: 100%;
+    }
+    
+    .extraction-panel {
+      background: white;
+      width: 400px;
+      min-width: 350px;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      resize: horizontal;
+      overflow-x: hidden;
+    }
+    
+    .panel-header {
+      padding: 12px 16px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 48px;
+    }
+    
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin: 0;
+    }
+    
+    .toggle-panel-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #374151;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .toggle-panel-btn:hover {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+    }
+    
+    .pdf-viewer-wrapper {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+    }
 
     .pdf-viewer-wrapper {
       height: 100%;
       width: 100%;
+      min-height: 600px;
     }
 
     .no-pdf-placeholder {
@@ -321,6 +444,37 @@ import { PdfPageInfo } from '../../core/services/pdf-renderer.service';
       .placeholder-features {
         grid-template-columns: 1fr;
       }
+      
+      /* Stack panels vertically on mobile */
+      .document-panels {
+        flex-direction: column;
+        height: auto;
+      }
+      
+      .extraction-panel {
+        width: 100%;
+        max-width: none;
+        min-width: auto;
+        height: 300px;
+        resize: vertical;
+      }
+      
+      .pdf-panel {
+        min-height: 400px;
+      }
+      
+      .panel-header {
+        padding: 8px 12px;
+      }
+      
+      .panel-title {
+        font-size: 13px;
+      }
+      
+      .toggle-panel-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+      }
     }
   `]
 })
@@ -330,6 +484,15 @@ export class DocumentViewerComponent implements OnInit, OnDestroy {
   isLoading = true;
   errorMessage = '';
   pdfViewerState: PdfViewerState | null = null;
+  
+  // Panel state
+  showExtractionPanel = true;
+  
+  // Linking state between extraction results and bounding boxes
+  selectedFieldId: string | null = null;
+  highlightedFieldId: string | null = null;
+  selectedBoundingBoxId: string | null = null;
+  highlightedBoundingBoxId: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -372,6 +535,80 @@ export class DocumentViewerComponent implements OnInit, OnDestroy {
   onPageRendered(pageInfo: PdfPageInfo): void {
     console.log('Page rendered:', pageInfo);
     // This can be used for future features like bounding box overlays
+  }
+  
+  onBoundingBoxClick(interaction: BoundingBoxInteraction): void {
+    console.log('Bounding box clicked:', interaction);
+    if (interaction && interaction.boundingBox) {
+      this.selectedBoundingBoxId = interaction.boundingBox.id;
+      this.selectedFieldId = interaction.boundingBox.id;
+      // Clear highlight when selecting
+      this.highlightedBoundingBoxId = null;
+      this.highlightedFieldId = null;
+    } else {
+      // Clear selection when clicking empty area
+      this.selectedBoundingBoxId = null;
+      this.selectedFieldId = null;
+    }
+  }
+  
+  onBoundingBoxHover(interaction: BoundingBoxInteraction): void {
+    console.log('Bounding box hovered:', interaction);
+    if (interaction && interaction.boundingBox && !this.selectedBoundingBoxId) {
+      this.highlightedBoundingBoxId = interaction.boundingBox.id;
+      this.highlightedFieldId = interaction.boundingBox.id;
+    } else if (!interaction || !interaction.boundingBox) {
+      // Clear highlight when leaving bounding box
+      this.highlightedBoundingBoxId = null;
+      this.highlightedFieldId = null;
+    }
+  }
+  
+  onBoundingBoxSelect(box: BoundingBox): void {
+    console.log('Bounding box selected:', box);
+    if (box && box.id) {
+      this.selectedBoundingBoxId = box.id;
+      this.selectedFieldId = box.id;
+      // Clear highlight when selecting
+      this.highlightedBoundingBoxId = null;
+      this.highlightedFieldId = null;
+    }
+  }
+
+  // Event handlers for extraction results panel
+  onFieldSelected(field: ExtractedField): void {
+    console.log('Field selected:', field);
+    this.selectedFieldId = field.id;
+    this.selectedBoundingBoxId = field.id;
+    // Clear highlight when selecting
+    this.highlightedFieldId = null;
+    this.highlightedBoundingBoxId = null;
+  }
+  
+  onFieldHighlighted(field: ExtractedField | null): void {
+    console.log('Field highlighted:', field);
+    if (!this.selectedFieldId) {
+      this.highlightedFieldId = field?.id || null;
+      this.highlightedBoundingBoxId = field?.id || null;
+    }
+  }
+  
+  onPanelToggle(): void {
+    this.showExtractionPanel = !this.showExtractionPanel;
+  }
+  
+  toggleExtractionPanel(): void {
+    this.showExtractionPanel = !this.showExtractionPanel;
+  }
+  
+  onExportRequested(event: { format: string; data: ExtractedField[] }): void {
+    console.log('Export requested:', event);
+    // TODO: Implement export functionality
+    // This could integrate with a service to export extraction results
+    // in various formats (JSON, CSV, etc.)
+    // For now, we can trigger a download of the data
+    const { format, data } = event;
+    console.log(`Exporting ${data.length} fields in ${format} format`);
   }
 
   goBack(): void {
