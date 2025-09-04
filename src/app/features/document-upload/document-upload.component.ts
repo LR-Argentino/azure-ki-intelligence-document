@@ -38,6 +38,13 @@ import { ErrorMessageComponent } from '../../shared/components/error-message/err
             tables, and key insights automatically with Azure Document Intelligence.
           </p>
 
+
+          <button
+            (click)="getModels()"
+            class="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors">
+            Gete Modell
+          </button>
+
           <!-- Feature highlights -->
           <div class="flex flex-wrap justify-center gap-6 mt-8">
             <div class="flex items-center space-x-2 bg-white/60 backdrop-blur-sm px-4 py-2 rounded-full border border-white/20">
@@ -239,7 +246,7 @@ export class DocumentUploadComponent {
     this.documentService.uploadDocument(file).subscribe({
       next: (document) => {
         // Start Azure analysis
-        this.azureService.analyzeDocument(file).subscribe({
+        this.azureService.analyzeInvoice(file).subscribe({
           next: (result) => {
             // Update document with extraction result
             document.extractionResult = result;
@@ -296,5 +303,9 @@ export class DocumentUploadComponent {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  async getModels(): Promise<void> {
+    await this.azureService.getModelLists()
   }
 }

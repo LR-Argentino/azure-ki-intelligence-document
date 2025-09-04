@@ -13,7 +13,7 @@ import { AzureIntelligenceError, AzureErrorCode, ErrorHandler } from '../errors/
 import { LoggingService } from './logging.service';
 
 // Azure SDK imports
-import DocumentIntelligenceRestClient, { 
+import DocumentIntelligenceRestClient, {
   DocumentIntelligenceClient
 } from '@azure-rest/ai-document-intelligence';
 import { AzureKeyCredential } from '@azure/core-auth';
@@ -61,8 +61,8 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
         this.client = DocumentIntelligenceRestClient(this.config.endpoint, credential, {
           apiVersion: this.config.apiVersion
         });
-        this.loggingService.info('Azure Document Intelligence service initialized', 
-          { endpoint: this.config.endpoint, apiVersion: this.config.apiVersion }, 
+        this.loggingService.info('Azure Document Intelligence service initialized',
+          { endpoint: this.config.endpoint, apiVersion: this.config.apiVersion },
           'AzureIntelligenceService');
       } else {
         this.loggingService.warn('Azure service not configured - missing endpoint or API key', undefined, 'AzureIntelligenceService');
@@ -77,6 +77,17 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    */
   isConfigured(): boolean {
     return this.client !== null && this.config !== null;
+  }
+
+  public async getModelLists(): Promise<void> {
+    this.loggingService.info("Fetching model list from Azure Document Intelligence", undefined, 'AzureIntelligenceService');
+    this.client!.pathUnchecked("/documentModels").get({
+      queryParameters: {
+        'api-version': '2024-11-30'
+      }
+    }).then((res) => {
+      console.log(res);
+    });
   }
 
   /**
@@ -100,7 +111,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     }
 
     const model = modelId || 'prebuilt-layout';
-    
+
     return from(this.analyzeDocumentWithAzure(file, model)).pipe(
       retry({
         count: 2,
@@ -189,8 +200,8 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
         status: result.status as 'notStarted' | 'running' | 'succeeded' | 'failed',
         createdDateTime: new Date().toISOString(), // Azure doesn't always provide this
         lastUpdatedDateTime: new Date().toISOString(), // Azure doesn't always provide this
-        percentCompleted: result.status === 'succeeded' ? 100 : 
-                         result.status === 'running' ? 50 : 
+        percentCompleted: result.status === 'succeeded' ? 100 :
+                         result.status === 'running' ? 50 :
                          result.status === 'failed' ? 0 : 0
       })),
       tap(status => {
@@ -215,55 +226,40 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    * @param modelId The model ID to use
    * @returns Promise with extraction result
    */
+  // A) analyzeDocumentWithAzure – Operation-Location unverändert weitergeben
   private async analyzeDocumentWithAzure(file: File, modelId: string): Promise<ExtractionResult> {
-    if (!this.client) {
-      throw new Error('Azure client not initialized');
-    }
+    if (!this.client) throw new Error('Azure client not initialized');
 
-    try {
-      // Convert file to ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Submit document for analysis
-      const response = await this.client.pathUnchecked('/documentModels/{modelId}:analyze', modelId).post({
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const response = await this.client
+      .pathUnchecked('/documentModels/{modelId}:analyze', modelId)
+      .post({
         contentType: 'application/octet-stream',
-        body: arrayBuffer
+        body: bytes,
+        queryParameters: { _overload: 'analyzeDocument', 'api-version': '2024-11-30' }
       });
 
-      if (response.status !== '202') {
-        throw new Error(`Failed to submit document for analysis: ${response.status}`);
-      }
-
-      // Extract operation ID from response headers
-      const operationLocation = response.headers['operation-location'] || response.headers['Operation-Location'];
-      if (!operationLocation) {
-        throw new Error('No operation location header found in response');
-      }
-
-      // Extract operation ID from the operation location URL
-      const operationId = operationLocation.split('/').pop();
-      if (!operationId) {
-        throw new Error('Could not extract operation ID from operation location');
-      }
-
-      this.loggingService.info(`Document submitted for analysis`, { 
-        fileName: file.name, 
-        modelId, 
-        operationId 
-      }, 'AzureIntelligenceService');
-
-      // Poll for completion
-      return await new Promise<ExtractionResult>((resolve, reject) => {
-        this.pollOperationUntilComplete(operationId).pipe(take(1)).subscribe({
-          next: (result) => resolve(result),
-          error: (err) => reject(err)
-        });
-      });
-    } catch (error: any) {
-      this.loggingService.error('Failed to analyze document with Azure', error, 'AzureIntelligenceService');
-      throw error;
+    const statusCode = typeof response.status === 'string' ? parseInt(response.status, 10) : response.status;
+    if (statusCode !== 202) {
+      const errText = (response as any).body ? JSON.stringify((response as any).body) : '';
+      throw new Error(`Failed to submit document for analysis: ${statusCode} ${errText}`);
     }
+
+    const getHeader = (name: string) => {
+      const h = (response.headers as any);
+      return typeof h.get === 'function' ? h.get(name) : (h[name] || h[name.toLowerCase()] || h[name.toUpperCase()]);
+    };
+    const operationLocation = getHeader('operation-location');
+    if (!operationLocation) throw new Error('No Operation-Location header found');
+
+    this.loggingService.info('Document submitted for analysis', { fileName: file.name, modelId, operationLocation }, 'AzureIntelligenceService');
+
+    return await new Promise<ExtractionResult>((resolve, reject) => {
+      this.pollOperationUntilComplete(operationLocation).pipe(take(1)).subscribe({ next: resolve, error: reject });
+    });
   }
+
+
 
 
 
@@ -272,26 +268,16 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    * @param operationId The operation ID to poll
    * @returns Observable that emits the final result
    */
-  private pollOperationUntilComplete(operationId: string): Observable<ExtractionResult> {
+  private pollOperationUntilComplete(operationLocationUrl: string): Observable<ExtractionResult> {
     return timer(0, 2000).pipe(
-      concatMap(() => from(this.getOperationResult(operationId))),
-      takeWhile(result => result.status === 'running' || result.status === 'notStarted', true),
-      map(result => {
-        if (result.status === 'succeeded') {
-          return this.mapAzureResultToExtractionResult(result.result);
-        } else if (result.status === 'failed') {
-          throw new Error(`Document analysis failed: ${result.error || 'Unknown error'}`);
-        }
-        // Still running, return null to continue polling
+      concatMap(() => from(this.getOperationResult(operationLocationUrl))),
+      takeWhile(r => r.status === 'running' || r.status === 'notStarted', true),
+      map(r => {
+        if (r.status === 'succeeded') return this.mapAzureResultToExtractionResult(r.result);
+        if (r.status === 'failed') throw new Error(`Document analysis failed: ${r.error || 'Unknown error'}`);
         return null;
       }),
-      // Filter out null values (still running) and only emit when we have a result
-      switchMap(result => {
-        if (result === null) {
-          return of(); // Empty observable, continue polling
-        }
-        return of(result); // Emit the final result
-      })
+      switchMap(r => r === null ? of() : of(r))
     );
   }
 
@@ -300,35 +286,41 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    * @param operationId The operation ID
    * @returns Promise with operation status and result
    */
-  private async getOperationResult(operationId: string): Promise<{
+  // C) getOperationResult – richtige Poll-Route, aus der URL extrahiert
+  private async getOperationResult(operationLocationUrl: string): Promise<{
     status: 'notStarted' | 'running' | 'succeeded' | 'failed';
     result?: any;
     error?: string;
   }> {
-    if (!this.client) {
-      throw new Error('Azure client not initialized');
-    }
+    if (!this.client) throw new Error('Azure client not initialized');
 
-    try {
-      // Use pathUnchecked to bypass strict typing constraints
-      const response = await this.client.pathUnchecked('/documentModels/operations/{operationId}', operationId).get();
+    // Operation-Location parsen
+    const url = new URL(operationLocationUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    // Erwartet: /documentintelligence/documentModels/{modelId}/analyzeResults/{resultId}
+    const dmIndex = parts.indexOf('documentModels');
+    const arIndex = parts.indexOf('analyzeResults');
+    if (dmIndex < 0 || !parts[dmIndex + 1]) throw new Error('Cannot parse modelId from Operation-Location');
+    if (arIndex < 0 || !parts[arIndex + 1]) throw new Error('Cannot parse resultId from Operation-Location');
 
-      if (response.status !== '200') {
-        throw new Error(`Failed to get operation result: ${response.status}`);
-      }
+    const modelId = decodeURIComponent(parts[dmIndex + 1]);
+    const resultId = decodeURIComponent(parts[arIndex + 1]);
 
-      const body = response.body as any;
-      
-      return {
-        status: body.status,
-        result: body.status === 'succeeded' ? body.analyzeResult : undefined,
-        error: body.status === 'failed' ? body.error?.message : undefined
-      };
-    } catch (error: any) {
-      this.loggingService.error('Failed to get operation result', error, 'AzureIntelligenceService');
-      throw error;
-    }
+    const resp = await this.client
+      .pathUnchecked('/documentModels/{modelId}/analyzeResults/{resultId}', modelId, resultId)
+      .get({ queryParameters: { 'api-version': '2024-11-30' } });
+
+    const code = typeof resp.status === 'string' ? parseInt(resp.status, 10) : resp.status;
+    if (code !== 200) throw new Error(`Failed to get operation result: ${code}`);
+
+    const body = resp.body as any;
+    return {
+      status: body.status,
+      result: body.status === 'succeeded' ? body.analyzeResult : undefined,
+      error: body.status === 'failed' ? body.error?.message : undefined
+    };
   }
+
 
   /**
    * Map Azure Document Intelligence result to our ExtractionResult format
@@ -340,15 +332,16 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
       status: 'succeeded',
       createdDateTime: new Date().toISOString(),
       lastUpdatedDateTime: new Date().toISOString(),
-      analyzeResult: {
-        apiVersion: azureResult.apiVersion || '2024-02-29-preview',
-        modelId: azureResult.modelId || 'prebuilt-layout',
-        stringIndexType: azureResult.stringIndexType || 'textElements',
-        content: this.extractAllText(azureResult),
-        pages: this.mapPages(azureResult.pages || []),
-        tables: this.mapTables(azureResult.tables || []),
-        keyValuePairs: this.mapKeyValuePairs(azureResult.keyValuePairs || [])
-      }
+      analyzeResult: azureResult
+      // analyzeResult: {
+      //   apiVersion: azureResult.apiVersion || '2024-02-29-preview',
+      //   modelId: azureResult.modelId || 'prebuilt-layout',
+      //   stringIndexType: azureResult.stringIndexType || 'textElements',
+      //   content: this.extractAllText(azureResult),
+      //   pages: this.mapPages(azureResult.pages || []),
+      //   tables: this.mapTables(azureResult.tables || []),
+      //   keyValuePairs: this.mapKeyValuePairs(azureResult.keyValuePairs || [])
+      // }
     };
   }
 
@@ -359,14 +352,14 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     if (azureResult.content) {
       return azureResult.content;
     }
-    
+
     // Fallback: concatenate text from all pages
     if (azureResult.pages) {
       return azureResult.pages
         .map((page: any) => page.lines?.map((line: any) => line.content).join('\n') || '')
         .join('\n\n');
     }
-    
+
     return '';
   }
 
@@ -414,7 +407,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    */
   private determineDocumentTypeFromResult(azureResult: any): DocumentType {
     const modelId = azureResult.modelId?.toLowerCase() || '';
-    
+
     if (modelId.includes('invoice')) {
       return DocumentType.INVOICE;
     } else if (modelId.includes('contract')) {
@@ -432,13 +425,13 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     // This would parse the actual Azure response for invoice fields
     const documents = analyzeResult.documents || [];
     const invoiceDoc = documents.find((doc: any) => doc.docType === 'invoice') || documents[0];
-    
+
     if (!invoiceDoc) {
       throw new Error('No invoice document found in analysis result');
     }
 
     const fields = invoiceDoc.fields || {};
-    
+
     return {
       vendorName: fields.VendorName?.content || fields.VendorAddress?.content || 'Unknown Vendor',
       customerName: fields.CustomerName?.content || fields.CustomerAddress?.content || 'Unknown Customer',
@@ -456,13 +449,13 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     // Extract contract data from Azure Document Intelligence result
     const documents = analyzeResult.documents || [];
     const contractDoc = documents.find((doc: any) => doc.docType === 'contract') || documents[0];
-    
+
     if (!contractDoc) {
       throw new Error('No contract document found in analysis result');
     }
 
     const fields = contractDoc.fields || {};
-    
+
     return {
       parties: this.extractParties(fields),
       effectiveDate: fields.EffectiveDate?.content || fields.StartDate?.content || 'Unknown',
@@ -478,7 +471,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
   private extractLayoutData(analyzeResult: any): any {
     const pages = analyzeResult.pages || [];
     const tables = analyzeResult.tables || [];
-    
+
     return {
       pageCount: pages.length,
       hasImages: pages.some((page: any) => page.images && page.images.length > 0),
@@ -492,17 +485,17 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    */
   private extractParties(fields: any): string[] {
     const parties: string[] = [];
-    
+
     if (fields.Parties?.valueArray) {
       return fields.Parties.valueArray.map((party: any) => party.content || 'Unknown Party');
     }
-    
+
     // Fallback: look for common party field names
     if (fields.Party1?.content) parties.push(fields.Party1.content);
     if (fields.Party2?.content) parties.push(fields.Party2.content);
     if (fields.Client?.content) parties.push(fields.Client.content);
     if (fields.Vendor?.content) parties.push(fields.Vendor.content);
-    
+
     return parties.length > 0 ? parties : ['Unknown Party A', 'Unknown Party B'];
   }
 
@@ -515,14 +508,14 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
       'payment', 'termination', 'confidentiality', 'liability', 'warranty',
       'intellectual property', 'force majeure', 'governing law', 'dispute resolution'
     ];
-    
+
     const lowerContent = content.toLowerCase();
     commonTerms.forEach(term => {
       if (lowerContent.includes(term)) {
         terms.push(term.charAt(0).toUpperCase() + term.slice(1));
       }
     });
-    
+
     return terms.length > 0 ? terms : ['Standard Terms'];
   }
 
@@ -531,10 +524,10 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    */
   private calculateTextDensity(content: string): number {
     if (!content) return 0;
-    
+
     const totalChars = content.length;
     const nonWhitespaceChars = content.replace(/\s/g, '').length;
-    
+
     return totalChars > 0 ? nonWhitespaceChars / totalChars : 0;
   }
 }
