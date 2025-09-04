@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import {Component, Output, EventEmitter, inject} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 
@@ -13,14 +13,14 @@ import { RouterModule } from '@angular/router';
           <!-- Left side -->
           <div class="flex items-center space-x-4">
             <!-- Mobile menu button -->
-            <button 
+            <button
               (click)="toggleSidebar()"
               class="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors">
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            
+
             <!-- Logo -->
             <div class="flex items-center">
               <div class="flex-shrink-0">
@@ -38,7 +38,7 @@ import { RouterModule } from '@angular/router';
 
           <!-- Desktop Navigation -->
           <nav class="hidden lg:flex space-x-1">
-            <a routerLink="/upload" 
+            <a routerLink="/upload"
                routerLinkActive="bg-primary-100 text-primary-700"
                class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">
               <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -46,7 +46,7 @@ import { RouterModule } from '@angular/router';
               </svg>
               Upload
             </a>
-            <a routerLink="/viewer" 
+            <a routerLink="/viewer"
                routerLinkActive="bg-primary-100 text-primary-700"
                class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">
               <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -54,7 +54,7 @@ import { RouterModule } from '@angular/router';
               </svg>
               Viewer
             </a>
-            <a routerLink="/chat" 
+            <a routerLink="/chat"
                routerLinkActive="bg-primary-100 text-primary-700"
                class="flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors">
               <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -67,14 +67,14 @@ import { RouterModule } from '@angular/router';
           <!-- Right side -->
           <div class="flex items-center space-x-2">
             <!-- Theme toggle -->
-            <button 
+            <button
               (click)="toggleTheme()"
               class="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors">
               <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12,18C11.11,18 10.26,17.8 9.5,17.45C11.56,16.5 13,14.42 13,12C13,9.58 11.56,7.5 9.5,6.55C10.26,6.2 11.11,6 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,8.69V4H15.31L12,0.69L8.69,4H4V8.69L0.69,12L4,15.31V20H8.69L12,23.31L15.31,20H20V15.31L23.31,12L20,8.69Z"/>
               </svg>
             </button>
-            
+
             <!-- User menu -->
             <div class="relative">
               <button class="flex items-center p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors">
@@ -92,7 +92,6 @@ import { RouterModule } from '@angular/router';
 })
 export class HeaderComponent {
   @Output() sidebarToggle = new EventEmitter<void>();
-
   toggleSidebar(): void {
     this.sidebarToggle.emit();
   }

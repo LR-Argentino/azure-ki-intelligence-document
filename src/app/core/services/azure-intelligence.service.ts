@@ -13,7 +13,7 @@ import { AzureIntelligenceError, AzureErrorCode, ErrorHandler } from '../errors/
 import { LoggingService } from './logging.service';
 
 // Azure SDK imports
-import DocumentIntelligenceRestClient, { 
+import DocumentIntelligenceRestClient, {
   DocumentIntelligenceClient
 } from '@azure-rest/ai-document-intelligence';
 import { AzureKeyCredential } from '@azure/core-auth';
@@ -61,8 +61,8 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
         this.client = DocumentIntelligenceRestClient(this.config.endpoint, credential, {
           apiVersion: this.config.apiVersion
         });
-        this.loggingService.info('Azure Document Intelligence service initialized', 
-          { endpoint: this.config.endpoint, apiVersion: this.config.apiVersion }, 
+        this.loggingService.info('Azure Document Intelligence service initialized',
+          { endpoint: this.config.endpoint, apiVersion: this.config.apiVersion },
           'AzureIntelligenceService');
       } else {
         this.loggingService.warn('Azure service not configured - missing endpoint or API key', undefined, 'AzureIntelligenceService');
@@ -79,6 +79,17 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.client !== null && this.config !== null;
   }
 
+  public async getModelLists(): Promise<void> {
+    this.loggingService.info("Fetching model list from Azure Document Intelligence", undefined, 'AzureIntelligenceService');
+    this.client!.pathUnchecked("/documentModels").get({
+      queryParameters: {
+        'api-version': '2024-11-30'
+      }
+    }).then((res) => {
+      console.log(res);
+    });
+  }
+
   /**
    * Analyze document using Azure Document Intelligence with comprehensive error handling
    * @param file The file to analyze
@@ -88,19 +99,19 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
   analyzeDocument(file: File, modelId?: string): Observable<ExtractionResult> {
     this.loggingService.info(`Starting document analysis: ${file.name}`, { modelId }, 'AzureIntelligenceService');
 
-    // If Azure is not configured, use mock data for development
     if (!this.isConfigured()) {
-      this.loggingService.warn('Azure service not configured, using mock data', { fileName: file.name }, 'AzureIntelligenceService');
-      return from(this.mockAnalyzeDocument(file, modelId)).pipe(
-        tap(result => {
-          this.loggingService.info(`Mock document analysis completed: ${file.name}`, result, 'AzureIntelligenceService');
-        })
+      const error = new AzureIntelligenceError(
+        AzureErrorCode.SERVICE_NOT_CONFIGURED,
+        'Azure Document Intelligence service is not properly configured',
+        undefined,
+        { fileName: file.name, modelId }
       );
+      this.loggingService.error('Service not configured', error, 'AzureIntelligenceService');
+      return throwError(() => error);
     }
 
-    // Try to use real Azure API, fall back to mock on error
     const model = modelId || 'prebuilt-layout';
-    
+
     return from(this.analyzeDocumentWithAzure(file, model)).pipe(
       retry({
         count: 2,
@@ -109,12 +120,18 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
           return of(null).pipe(delay(2000 * retryCount));
         }
       }),
-      catchError(error => {
-        this.loggingService.warn('Azure API failed, falling back to mock data', error, 'AzureIntelligenceService');
-        return from(this.mockAnalyzeDocument(file, modelId));
-      }),
       tap(result => {
         this.loggingService.info(`Document analysis completed: ${file.name}`, result, 'AzureIntelligenceService');
+      }),
+      catchError(error => {
+        const serviceError = new AzureIntelligenceError(
+          AzureErrorCode.ANALYSIS_FAILED,
+          `Failed to analyze document: ${file.name}`,
+          error,
+          { fileName: file.name, modelId: model }
+        );
+        this.loggingService.error('Document analysis failed', serviceError, 'AzureIntelligenceService');
+        return throwError(() => serviceError);
       })
     );
   }
@@ -126,14 +143,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.analyzeDocument(file, 'prebuilt-invoice').pipe(
       map(result => ({
         ...result,
-        invoiceData: {
-          vendorName: 'Sample Vendor',
-          customerName: 'Sample Customer',
-          invoiceId: 'INV-001',
-          invoiceDate: '2024-01-15',
-          totalAmount: 1234.56,
-          currency: 'USD'
-        }
+        invoiceData: this.extractInvoiceData(result.analyzeResult)
       }))
     );
   }
@@ -142,13 +152,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.analyzeDocument(file, 'prebuilt-contract').pipe(
       map(result => ({
         ...result,
-        contractData: {
-          parties: ['Party A', 'Party B'],
-          effectiveDate: '2024-01-01',
-          expirationDate: '2024-12-31',
-          contractType: 'Service Agreement',
-          keyTerms: ['Payment terms', 'Termination Clause', 'Confidentiality']
-        }
+        contractData: this.extractContractData(result.analyzeResult)
       }))
     );
   }
@@ -157,12 +161,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     return this.analyzeDocument(file, 'prebuilt-layout').pipe(
       map(result => ({
         ...result,
-        layoutData: {
-          pageCount: 1,
-          hasImages: false,
-          hasTables: true,
-          textDensity: 0.75
-        }
+        layoutData: this.extractLayoutData(result.analyzeResult)
       }))
     );
   }
@@ -201,8 +200,8 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
         status: result.status as 'notStarted' | 'running' | 'succeeded' | 'failed',
         createdDateTime: new Date().toISOString(), // Azure doesn't always provide this
         lastUpdatedDateTime: new Date().toISOString(), // Azure doesn't always provide this
-        percentCompleted: result.status === 'succeeded' ? 100 : 
-                         result.status === 'running' ? 50 : 
+        percentCompleted: result.status === 'succeeded' ? 100 :
+                         result.status === 'running' ? 50 :
                          result.status === 'failed' ? 0 : 0
       })),
       tap(status => {
@@ -227,109 +226,58 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    * @param modelId The model ID to use
    * @returns Promise with extraction result
    */
+  // A) analyzeDocumentWithAzure – Operation-Location unverändert weitergeben
   private async analyzeDocumentWithAzure(file: File, modelId: string): Promise<ExtractionResult> {
-    if (!this.client) {
-      throw new Error('Azure client not initialized');
-    }
+    if (!this.client) throw new Error('Azure client not initialized');
 
-    try {
-      // Convert file to ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Submit document for analysis
-      const response = await this.client.pathUnchecked('/documentModels/{modelId}:analyze', modelId).post({
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const response = await this.client
+      .pathUnchecked('/documentModels/{modelId}:analyze', modelId)
+      .post({
         contentType: 'application/octet-stream',
-        body: arrayBuffer
+        body: bytes,
+        queryParameters: { _overload: 'analyzeDocument', 'api-version': '2024-11-30' }
       });
 
-      if (response.status !== '202') {
-        throw new Error(`Failed to submit document for analysis: ${response.status}`);
-      }
-
-      // Extract operation ID from response headers
-      const operationLocation = response.headers['operation-location'] || response.headers['Operation-Location'];
-      if (!operationLocation) {
-        throw new Error('No operation location header found in response');
-      }
-
-      // Extract operation ID from the operation location URL
-      const operationId = operationLocation.split('/').pop();
-      if (!operationId) {
-        throw new Error('Could not extract operation ID from operation location');
-      }
-
-      this.loggingService.info(`Document submitted for analysis`, { 
-        fileName: file.name, 
-        modelId, 
-        operationId 
-      }, 'AzureIntelligenceService');
-
-      // Poll for completion
-      return await new Promise<ExtractionResult>((resolve, reject) => {
-        this.pollOperationUntilComplete(operationId).pipe(take(1)).subscribe({
-          next: (result) => resolve(result),
-          error: (err) => reject(err)
-        });
-      });
-    } catch (error: any) {
-      this.loggingService.error('Failed to analyze document with Azure', error, 'AzureIntelligenceService');
-      throw error;
+    const statusCode = typeof response.status === 'string' ? parseInt(response.status, 10) : response.status;
+    if (statusCode !== 202) {
+      const errText = (response as any).body ? JSON.stringify((response as any).body) : '';
+      throw new Error(`Failed to submit document for analysis: ${statusCode} ${errText}`);
     }
-  }
 
-  /**
-   * Mock document analysis for development/fallback
-   * @param file The file to analyze
-   * @param modelId The model ID to use
-   * @returns Promise with mock extraction result
-   */
-  private async mockAnalyzeDocument(file: File, modelId?: string): Promise<ExtractionResult> {
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-
-    const documentType = this.determineDocumentTypeFromFileName(file.name);
-    
-    return {
-      status: 'succeeded',
-      createdDateTime: new Date().toISOString(),
-      lastUpdatedDateTime: new Date().toISOString(),
-      analyzeResult: {
-        apiVersion: '2024-02-29-preview',
-        modelId: modelId || 'prebuilt-layout',
-        stringIndexType: 'textElements',
-        content: this.generateMockContent(documentType),
-        pages: this.generateMockPages(),
-        tables: this.generateMockTables(documentType),
-        keyValuePairs: this.generateMockKeyValuePairs(documentType)
-      }
+    const getHeader = (name: string) => {
+      const h = (response.headers as any);
+      return typeof h.get === 'function' ? h.get(name) : (h[name] || h[name.toLowerCase()] || h[name.toUpperCase()]);
     };
+    const operationLocation = getHeader('operation-location');
+    if (!operationLocation) throw new Error('No Operation-Location header found');
+
+    this.loggingService.info('Document submitted for analysis', { fileName: file.name, modelId, operationLocation }, 'AzureIntelligenceService');
+
+    return await new Promise<ExtractionResult>((resolve, reject) => {
+      this.pollOperationUntilComplete(operationLocation).pipe(take(1)).subscribe({ next: resolve, error: reject });
+    });
   }
+
+
+
+
 
   /**
    * Poll operation until complete
    * @param operationId The operation ID to poll
    * @returns Observable that emits the final result
    */
-  private pollOperationUntilComplete(operationId: string): Observable<ExtractionResult> {
+  private pollOperationUntilComplete(operationLocationUrl: string): Observable<ExtractionResult> {
     return timer(0, 2000).pipe(
-      concatMap(() => from(this.getOperationResult(operationId))),
-      takeWhile(result => result.status === 'running' || result.status === 'notStarted', true),
-      map(result => {
-        if (result.status === 'succeeded') {
-          return this.mapAzureResultToExtractionResult(result.result);
-        } else if (result.status === 'failed') {
-          throw new Error(`Document analysis failed: ${result.error || 'Unknown error'}`);
-        }
-        // Still running, return null to continue polling
+      concatMap(() => from(this.getOperationResult(operationLocationUrl))),
+      takeWhile(r => r.status === 'running' || r.status === 'notStarted', true),
+      map(r => {
+        if (r.status === 'succeeded') return this.mapAzureResultToExtractionResult(r.result);
+        if (r.status === 'failed') throw new Error(`Document analysis failed: ${r.error || 'Unknown error'}`);
         return null;
       }),
-      // Filter out null values (still running) and only emit when we have a result
-      switchMap(result => {
-        if (result === null) {
-          return of(); // Empty observable, continue polling
-        }
-        return of(result); // Emit the final result
-      })
+      switchMap(r => r === null ? of() : of(r))
     );
   }
 
@@ -338,35 +286,41 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    * @param operationId The operation ID
    * @returns Promise with operation status and result
    */
-  private async getOperationResult(operationId: string): Promise<{
+  // C) getOperationResult – richtige Poll-Route, aus der URL extrahiert
+  private async getOperationResult(operationLocationUrl: string): Promise<{
     status: 'notStarted' | 'running' | 'succeeded' | 'failed';
     result?: any;
     error?: string;
   }> {
-    if (!this.client) {
-      throw new Error('Azure client not initialized');
-    }
+    if (!this.client) throw new Error('Azure client not initialized');
 
-    try {
-      // Use pathUnchecked to bypass strict typing constraints
-      const response = await this.client.pathUnchecked('/documentModels/operations/{operationId}', operationId).get();
+    // Operation-Location parsen
+    const url = new URL(operationLocationUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    // Erwartet: /documentintelligence/documentModels/{modelId}/analyzeResults/{resultId}
+    const dmIndex = parts.indexOf('documentModels');
+    const arIndex = parts.indexOf('analyzeResults');
+    if (dmIndex < 0 || !parts[dmIndex + 1]) throw new Error('Cannot parse modelId from Operation-Location');
+    if (arIndex < 0 || !parts[arIndex + 1]) throw new Error('Cannot parse resultId from Operation-Location');
 
-      if (response.status !== '200') {
-        throw new Error(`Failed to get operation result: ${response.status}`);
-      }
+    const modelId = decodeURIComponent(parts[dmIndex + 1]);
+    const resultId = decodeURIComponent(parts[arIndex + 1]);
 
-      const body = response.body as any;
-      
-      return {
-        status: body.status,
-        result: body.status === 'succeeded' ? body.analyzeResult : undefined,
-        error: body.status === 'failed' ? body.error?.message : undefined
-      };
-    } catch (error: any) {
-      this.loggingService.error('Failed to get operation result', error, 'AzureIntelligenceService');
-      throw error;
-    }
+    const resp = await this.client
+      .pathUnchecked('/documentModels/{modelId}/analyzeResults/{resultId}', modelId, resultId)
+      .get({ queryParameters: { 'api-version': '2024-11-30' } });
+
+    const code = typeof resp.status === 'string' ? parseInt(resp.status, 10) : resp.status;
+    if (code !== 200) throw new Error(`Failed to get operation result: ${code}`);
+
+    const body = resp.body as any;
+    return {
+      status: body.status,
+      result: body.status === 'succeeded' ? body.analyzeResult : undefined,
+      error: body.status === 'failed' ? body.error?.message : undefined
+    };
   }
+
 
   /**
    * Map Azure Document Intelligence result to our ExtractionResult format
@@ -378,15 +332,16 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
       status: 'succeeded',
       createdDateTime: new Date().toISOString(),
       lastUpdatedDateTime: new Date().toISOString(),
-      analyzeResult: {
-        apiVersion: azureResult.apiVersion || '2024-02-29-preview',
-        modelId: azureResult.modelId || 'prebuilt-layout',
-        stringIndexType: azureResult.stringIndexType || 'textElements',
-        content: this.extractAllText(azureResult),
-        pages: this.mapPages(azureResult.pages || []),
-        tables: this.mapTables(azureResult.tables || []),
-        keyValuePairs: this.mapKeyValuePairs(azureResult.keyValuePairs || [])
-      }
+      analyzeResult: azureResult
+      // analyzeResult: {
+      //   apiVersion: azureResult.apiVersion || '2024-02-29-preview',
+      //   modelId: azureResult.modelId || 'prebuilt-layout',
+      //   stringIndexType: azureResult.stringIndexType || 'textElements',
+      //   content: this.extractAllText(azureResult),
+      //   pages: this.mapPages(azureResult.pages || []),
+      //   tables: this.mapTables(azureResult.tables || []),
+      //   keyValuePairs: this.mapKeyValuePairs(azureResult.keyValuePairs || [])
+      // }
     };
   }
 
@@ -397,14 +352,14 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
     if (azureResult.content) {
       return azureResult.content;
     }
-    
+
     // Fallback: concatenate text from all pages
     if (azureResult.pages) {
       return azureResult.pages
         .map((page: any) => page.lines?.map((line: any) => line.content).join('\n') || '')
         .join('\n\n');
     }
-    
+
     return '';
   }
 
@@ -452,7 +407,7 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    */
   private determineDocumentTypeFromResult(azureResult: any): DocumentType {
     const modelId = azureResult.modelId?.toLowerCase() || '';
-    
+
     if (modelId.includes('invoice')) {
       return DocumentType.INVOICE;
     } else if (modelId.includes('contract')) {
@@ -463,154 +418,116 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
   }
 
   /**
-   * Determine document type from file name for mock data
+   * Extract invoice-specific data from Azure result
    */
-  private determineDocumentTypeFromFileName(fileName: string): DocumentType {
-    const name = fileName.toLowerCase();
-    
-    if (name.includes('invoice') || name.includes('rechnung') || name.includes('bill')) {
-      return DocumentType.INVOICE;
-    } else if (name.includes('contract') || name.includes('vertrag') || name.includes('agreement')) {
-      return DocumentType.CONTRACT;
-    } else {
-      return DocumentType.LAYOUT;
+  private extractInvoiceData(analyzeResult: any): any {
+    // Extract invoice data from Azure Document Intelligence result
+    // This would parse the actual Azure response for invoice fields
+    const documents = analyzeResult.documents || [];
+    const invoiceDoc = documents.find((doc: any) => doc.docType === 'invoice') || documents[0];
+
+    if (!invoiceDoc) {
+      throw new Error('No invoice document found in analysis result');
     }
+
+    const fields = invoiceDoc.fields || {};
+
+    return {
+      vendorName: fields.VendorName?.content || fields.VendorAddress?.content || 'Unknown Vendor',
+      customerName: fields.CustomerName?.content || fields.CustomerAddress?.content || 'Unknown Customer',
+      invoiceId: fields.InvoiceId?.content || fields.InvoiceNumber?.content || 'Unknown',
+      invoiceDate: fields.InvoiceDate?.content || new Date().toISOString().split('T')[0],
+      totalAmount: parseFloat(fields.InvoiceTotal?.content || fields.TotalAmount?.content || '0'),
+      currency: fields.Currency?.content || 'USD'
+    };
   }
 
   /**
-   * Generate mock content based on document type
+   * Extract contract-specific data from Azure result
    */
-  private generateMockContent(documentType: DocumentType): string {
-    switch (documentType) {
-      case DocumentType.INVOICE:
-        return `INVOICE
+  private extractContractData(analyzeResult: any): any {
+    // Extract contract data from Azure Document Intelligence result
+    const documents = analyzeResult.documents || [];
+    const contractDoc = documents.find((doc: any) => doc.docType === 'contract') || documents[0];
 
-Invoice Number: INV-2024-001
-Date: ${new Date().toLocaleDateString()}
-
-Bill To:
-John Doe
-123 Main Street
-Anytown, ST 12345
-
-Description                 Qty    Price    Total
-Web Development Services     1    $2,500   $2,500
-Hosting Setup               1      $150     $150
-
-Subtotal:                                  $2,650
-Tax (8%):                                   $212
-Total:                                    $2,862`;
-
-      case DocumentType.CONTRACT:
-        return `SERVICE AGREEMENT
-
-This Service Agreement ("Agreement") is entered into on ${new Date().toLocaleDateString()}
-
-PARTIES:
-Client: ABC Corporation
-Service Provider: XYZ Services LLC
-
-SCOPE OF WORK:
-The Service Provider agrees to provide web development services including:
-- Frontend development
-- Backend API development
-- Database design and implementation
-
-TERMS:
-Duration: 6 months
-Payment: $5,000 per month
-Start Date: ${new Date().toLocaleDateString()}
-
-SIGNATURES:
-Client: _________________
-Service Provider: _________________`;
-
-      default:
-        return `DOCUMENT CONTENT
-
-This is a sample document with various text elements.
-
-Header Section
-This document contains multiple paragraphs and sections.
-
-Main Content
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
-Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-
-Footer Section
-Document processed on ${new Date().toLocaleDateString()}`;
+    if (!contractDoc) {
+      throw new Error('No contract document found in analysis result');
     }
+
+    const fields = contractDoc.fields || {};
+
+    return {
+      parties: this.extractParties(fields),
+      effectiveDate: fields.EffectiveDate?.content || fields.StartDate?.content || 'Unknown',
+      expirationDate: fields.ExpirationDate?.content || fields.EndDate?.content || 'Unknown',
+      contractType: fields.ContractType?.content || 'Unknown Agreement',
+      keyTerms: this.extractKeyTerms(analyzeResult.content || '')
+    };
   }
 
   /**
-   * Generate mock pages
+   * Extract layout-specific data from Azure result
    */
-  private generateMockPages(): any[] {
-    return [
-      {
-        pageNumber: 1,
-        text: 'Page 1 content with various text elements',
-        tables: [],
-        keyValuePairs: []
-      }
+  private extractLayoutData(analyzeResult: any): any {
+    const pages = analyzeResult.pages || [];
+    const tables = analyzeResult.tables || [];
+
+    return {
+      pageCount: pages.length,
+      hasImages: pages.some((page: any) => page.images && page.images.length > 0),
+      hasTables: tables.length > 0,
+      textDensity: this.calculateTextDensity(analyzeResult.content || '')
+    };
+  }
+
+  /**
+   * Extract parties from contract fields
+   */
+  private extractParties(fields: any): string[] {
+    const parties: string[] = [];
+
+    if (fields.Parties?.valueArray) {
+      return fields.Parties.valueArray.map((party: any) => party.content || 'Unknown Party');
+    }
+
+    // Fallback: look for common party field names
+    if (fields.Party1?.content) parties.push(fields.Party1.content);
+    if (fields.Party2?.content) parties.push(fields.Party2.content);
+    if (fields.Client?.content) parties.push(fields.Client.content);
+    if (fields.Vendor?.content) parties.push(fields.Vendor.content);
+
+    return parties.length > 0 ? parties : ['Unknown Party A', 'Unknown Party B'];
+  }
+
+  /**
+   * Extract key terms from contract content
+   */
+  private extractKeyTerms(content: string): string[] {
+    const terms: string[] = [];
+    const commonTerms = [
+      'payment', 'termination', 'confidentiality', 'liability', 'warranty',
+      'intellectual property', 'force majeure', 'governing law', 'dispute resolution'
     ];
+
+    const lowerContent = content.toLowerCase();
+    commonTerms.forEach(term => {
+      if (lowerContent.includes(term)) {
+        terms.push(term.charAt(0).toUpperCase() + term.slice(1));
+      }
+    });
+
+    return terms.length > 0 ? terms : ['Standard Terms'];
   }
 
   /**
-   * Generate mock tables based on document type
+   * Calculate text density for layout analysis
    */
-  private generateMockTables(documentType: DocumentType): any[] {
-    if (documentType === DocumentType.INVOICE) {
-      return [
-        {
-          rowCount: 3,
-          columnCount: 4,
-          cells: [
-            { rowIndex: 0, columnIndex: 0, text: 'Description', confidence: 0.99 },
-            { rowIndex: 0, columnIndex: 1, text: 'Qty', confidence: 0.99 },
-            { rowIndex: 0, columnIndex: 2, text: 'Price', confidence: 0.99 },
-            { rowIndex: 0, columnIndex: 3, text: 'Total', confidence: 0.99 },
-            { rowIndex: 1, columnIndex: 0, text: 'Web Development', confidence: 0.95 },
-            { rowIndex: 1, columnIndex: 1, text: '1', confidence: 0.98 },
-            { rowIndex: 1, columnIndex: 2, text: '$2,500', confidence: 0.97 },
-            { rowIndex: 1, columnIndex: 3, text: '$2,500', confidence: 0.97 },
-            { rowIndex: 2, columnIndex: 0, text: 'Hosting Setup', confidence: 0.94 },
-            { rowIndex: 2, columnIndex: 1, text: '1', confidence: 0.98 },
-            { rowIndex: 2, columnIndex: 2, text: '$150', confidence: 0.96 },
-            { rowIndex: 2, columnIndex: 3, text: '$150', confidence: 0.96 }
-          ]
-        }
-      ];
-    }
-    return [];
-  }
+  private calculateTextDensity(content: string): number {
+    if (!content) return 0;
 
-  /**
-   * Generate mock key-value pairs based on document type
-   */
-  private generateMockKeyValuePairs(documentType: DocumentType): any[] {
-    switch (documentType) {
-      case DocumentType.INVOICE:
-        return [
-          { key: 'Invoice Number', value: 'INV-2024-001', confidence: 0.98 },
-          { key: 'Date', value: new Date().toLocaleDateString(), confidence: 0.97 },
-          { key: 'Total', value: '$2,862', confidence: 0.99 },
-          { key: 'Tax', value: '$212', confidence: 0.96 }
-        ];
+    const totalChars = content.length;
+    const nonWhitespaceChars = content.replace(/\s/g, '').length;
 
-      case DocumentType.CONTRACT:
-        return [
-          { key: 'Agreement Type', value: 'Service Agreement', confidence: 0.98 },
-          { key: 'Duration', value: '6 months', confidence: 0.95 },
-          { key: 'Monthly Payment', value: '$5,000', confidence: 0.97 },
-          { key: 'Start Date', value: new Date().toLocaleDateString(), confidence: 0.96 }
-        ];
-
-      default:
-        return [
-          { key: 'Document Type', value: 'General Document', confidence: 0.90 },
-          { key: 'Processed Date', value: new Date().toLocaleDateString(), confidence: 0.99 }
-        ];
-    }
+    return totalChars > 0 ? nonWhitespaceChars / totalChars : 0;
   }
 }
