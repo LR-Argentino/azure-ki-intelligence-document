@@ -675,13 +675,29 @@ export class ExtractionResultsComponent implements OnInit, OnChanges {
         // Process words
         if (page.words) {
           page.words.forEach((word: Word) => {
+            const fieldId = `word-${wordIndex++}`;
             this.extractedFields.push({
-              id: `word-${wordIndex++}`,
+              id: fieldId,
               type: 'word',
               label: 'Word',
               value: word.content,
               confidence: word.confidence,
               pageNumber: page.pageNumber,
+              boundingBox: {
+                id: fieldId,
+                polygon: word.polygon || [],
+                content: word.content,
+                confidence: word.confidence,
+                type: BoundingBoxType.WORD,
+                pageNumber: page.pageNumber,
+                canvasCoordinates: {
+                  x: 0,
+                  y: 0,
+                  width: 0,
+                  height: 0,
+                  points: []
+                }
+              },
               metadata: { spans: word.span }
             });
           });
@@ -690,13 +706,29 @@ export class ExtractionResultsComponent implements OnInit, OnChanges {
         // Process lines
         if (page.lines) {
           page.lines.forEach((line: Line) => {
+            const fieldId = `line-${lineIndex++}`;
             this.extractedFields.push({
-              id: `line-${lineIndex++}`,
+              id: fieldId,
               type: 'line',
               label: 'Text Line',
               value: line.content,
               confidence: 1.0, // Lines typically don't have confidence
               pageNumber: page.pageNumber,
+              boundingBox: {
+                id: fieldId,
+                polygon: line.polygon || [],
+                content: line.content,
+                confidence: 1.0,
+                type: BoundingBoxType.LINE,
+                pageNumber: page.pageNumber,
+                canvasCoordinates: {
+                  x: 0,
+                  y: 0,
+                  width: 0,
+                  height: 0,
+                  points: []
+                }
+              },
               metadata: { spans: line.spans }
             });
           });

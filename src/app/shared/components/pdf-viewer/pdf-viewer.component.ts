@@ -376,6 +376,7 @@ export class PdfViewerComponent implements OnInit, OnDestroy, OnChanges {
   @Input() showBoundingBoxes: boolean = true;
   @Input() selectedBoxId: string | null = null;
   @Input() highlightedBoxId: string | null = null;
+  @Input() selectedField: any = null;
   @Input() overlaySettings: OverlaySettings = {
     showWords: false,
     showLines: true,
@@ -426,7 +427,9 @@ export class PdfViewerComponent implements OnInit, OnDestroy, OnChanges {
     }
     
     // Handle changes to selection/highlight inputs
-    if (changes['selectedBoxId'] || changes['highlightedBoxId']) {
+    if (changes['selectedBoxId'] || changes['highlightedBoxId'] || changes['selectedField']) {
+      console.log('[PdfViewer] Selection changed - updating bounding boxes');
+      this.updateCurrentPageBoundingBoxes();
       // Trigger change detection for the bounding box overlay component
       this.cdr.detectChanges();
     }
@@ -658,7 +661,52 @@ export class PdfViewerComponent implements OnInit, OnDestroy, OnChanges {
   }
   
   private updateCurrentPageBoundingBoxes(): void {
-    if (this.extractionResult) {
+    console.log('[PdfViewer] updateCurrentPageBoundingBoxes called');
+    console.log('[PdfViewer] extractionResult:', this.extractionResult);
+    console.log('[PdfViewer] selectedField:', this.selectedField);
+    console.log('[PdfViewer] canvas dimensions:', { width: this.canvasWidth, height: this.canvasHeight });
+    console.log('[PdfViewer] current page:', this.state.currentPage);
+    console.log('[PdfViewer] scale:', this.state.scale);
+    
+    this.currentPageBoundingBoxes = [];
+    
+    // If we have a selected field with a bounding box, prioritize that
+    if (this.selectedField?.boundingBox && this.selectedField.boundingBox.pageNumber === this.state.currentPage) {
+      console.log('[PdfViewer] Using selected field bounding box:', this.selectedField.boundingBox);
+      
+      const boundingBox = this.selectedField.boundingBox;
+      if (boundingBox.polygon && boundingBox.polygon.length >= 8) {
+        try {
+          // Calculate canvas coordinates from the stored polygon
+          const pageWidth = boundingBox.pageNumber ? this.getPageWidth() : 8.5; // Default page width in inches
+          const pageHeight = boundingBox.pageNumber ? this.getPageHeight() : 11; // Default page height in inches
+          
+          const canvasCoordinates = this.boundingBoxService.convertPolygonToCanvasCoordinates(
+            boundingBox.polygon,
+            pageWidth,
+            pageHeight,
+            this.canvasWidth,
+            this.canvasHeight,
+            this.state.scale
+          );
+          
+          const displayBox: BoundingBox = {
+            ...boundingBox,
+            canvasCoordinates,
+            isSelected: true
+          };
+          
+          this.currentPageBoundingBoxes = [displayBox];
+          console.log('[PdfViewer] Created selected field bounding box:', displayBox);
+        } catch (error) {
+          console.error('[PdfViewer] Error processing selected field bounding box:', error);
+        }
+      } else {
+        console.log('[PdfViewer] Selected field has invalid polygon:', boundingBox.polygon);
+      }
+    }
+    // Fallback to extraction result if no selected field or if we want to show all boxes
+    else if (this.extractionResult) {
       this.currentPageBoundingBoxes = this.boundingBoxService.createBoundingBoxes(
         this.extractionResult,
         this.state.currentPage,
@@ -666,11 +714,29 @@ export class PdfViewerComponent implements OnInit, OnDestroy, OnChanges {
         this.canvasHeight,
         this.state.scale
       );
+      console.log('[PdfViewer] Created bounding boxes from extraction result:', this.currentPageBoundingBoxes.length, this.currentPageBoundingBoxes);
     } else {
-      this.currentPageBoundingBoxes = [];
+      console.log('[PdfViewer] No extraction result or selected field available');
     }
+    
+    console.log('[PdfViewer] showBoundingBoxes:', this.showBoundingBoxes);
+    console.log('[PdfViewer] Final bounding boxes:', this.currentPageBoundingBoxes.length);
   }
 
+  private getPageWidth(): number {
+    // Try to get actual page width from PDF renderer
+    const docInfo = this.pdfRenderer.getDocumentInfo();
+    // Default to 8.5 inches if unable to get actual width
+    return 8.5;
+  }
+  
+  private getPageHeight(): number {
+    // Try to get actual page height from PDF renderer
+    const docInfo = this.pdfRenderer.getDocumentInfo();
+    // Default to 11 inches if unable to get actual height
+    return 11;
+  }
+  
   // Expose Math for template
   Math = Math;
 }

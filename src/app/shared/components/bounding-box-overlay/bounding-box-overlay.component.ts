@@ -38,7 +38,14 @@ import { CoordinateConverterUtil } from '../../utils/coordinate-converter.util';
       [style.top]="'0'"
       [style.left]="'0'"
       [style.pointer-events]="'none'"
-      [style.z-index]="'10'">
+      [style.z-index]="'10'"
+      [style.border]="'2px dashed red'"
+      [style.background-color]="'rgba(255, 0, 0, 0.1)'">
+      
+      <!-- Debug indicator -->
+      <div style="position: absolute; top: 10px; left: 10px; background: red; color: white; padding: 4px 8px; font-size: 12px; z-index: 1000; pointer-events: auto;">
+        Overlay Active: {{ visibleBoundingBoxes.length }} boxes
+      </div>
       
       <!-- Bounding box elements -->
       <div
@@ -226,6 +233,16 @@ export class BoundingBoxOverlayComponent implements OnInit, OnDestroy, OnChanges
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    console.log('[BoundingBoxOverlay] ngOnChanges:', changes);
+    
+    if (changes['boundingBoxes']) {
+      console.log('[BoundingBoxOverlay] boundingBoxes changed:', {
+        previousValue: changes['boundingBoxes'].previousValue?.length || 0,
+        currentValue: changes['boundingBoxes'].currentValue?.length || 0,
+        boundingBoxes: this.boundingBoxes
+      });
+    }
+    
     if (changes['boundingBoxes'] || changes['overlaySettings']) {
       this.updateVisibleBoundingBoxes();
     }
@@ -374,7 +391,13 @@ export class BoundingBoxOverlayComponent implements OnInit, OnDestroy, OnChanges
   }
 
   private updateVisibleBoundingBoxes(): void {
+    console.log('[BoundingBoxOverlay] updateVisibleBoundingBoxes called');
+    console.log('[BoundingBoxOverlay] input boundingBoxes:', this.boundingBoxes.length, this.boundingBoxes);
+    console.log('[BoundingBoxOverlay] overlaySettings:', this.overlaySettings);
+    
     this.visibleBoundingBoxes = this.boundingBoxes.filter(box => this.shouldShowBox(box));
+    
+    console.log('[BoundingBoxOverlay] visible boundingBoxes after filtering:', this.visibleBoundingBoxes.length, this.visibleBoundingBoxes);
   }
 
   private shouldShowBox(box: BoundingBox): boolean {

@@ -108,6 +108,7 @@ import { ExtractionResultsComponent, ExtractedField } from '../../shared/compone
                   [extractionResult]="currentDocument.extractionResult || null"
                   [selectedBoxId]="selectedBoundingBoxId"
                   [highlightedBoxId]="highlightedBoundingBoxId"
+                  [selectedField]="selectedField"
                   (stateChange)="onPdfViewerStateChange($event)"
                   (pageRendered)="onPageRendered($event)"
                   (boundingBoxClick)="onBoundingBoxClick($event)"
@@ -493,6 +494,7 @@ export class DocumentViewerComponent implements OnInit, OnDestroy {
   highlightedFieldId: string | null = null;
   selectedBoundingBoxId: string | null = null;
   highlightedBoundingBoxId: string | null = null;
+  selectedField: ExtractedField | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -578,11 +580,15 @@ export class DocumentViewerComponent implements OnInit, OnDestroy {
   // Event handlers for extraction results panel
   onFieldSelected(field: ExtractedField): void {
     console.log('Field selected:', field);
+    console.log('Field bounding box:', field.boundingBox);
     this.selectedFieldId = field.id;
     this.selectedBoundingBoxId = field.id;
     // Clear highlight when selecting
     this.highlightedFieldId = null;
     this.highlightedBoundingBoxId = null;
+    
+    // Store the selected field for use by the PDF viewer
+    this.selectedField = field;
   }
   
   onFieldHighlighted(field: ExtractedField | null): void {

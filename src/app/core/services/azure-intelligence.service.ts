@@ -328,6 +328,14 @@ export class AzureIntelligenceService implements IAzureIntelligenceService {
    * @returns Mapped ExtractionResult
    */
   private mapAzureResultToExtractionResult(azureResult: any): ExtractionResult {
+    console.log('[AzureIntelligenceService] Raw Azure result:', JSON.stringify(azureResult, null, 2));
+    console.log('[AzureIntelligenceService] Azure pages:', azureResult.pages);
+    if (azureResult.pages && azureResult.pages[0]) {
+      console.log('[AzureIntelligenceService] First page structure:', azureResult.pages[0]);
+      console.log('[AzureIntelligenceService] First page words:', azureResult.pages[0].words?.slice(0, 3));
+      console.log('[AzureIntelligenceService] First page lines:', azureResult.pages[0].lines?.slice(0, 3));
+    }
+    
     return {
       status: 'succeeded',
       createdDateTime: new Date().toISOString(),

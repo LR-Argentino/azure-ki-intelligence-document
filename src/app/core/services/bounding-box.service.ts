@@ -61,92 +61,166 @@ export class BoundingBoxService {
     canvasHeight: number,
     scale: number = 1
   ): BoundingBox[] {
+    console.log('[BoundingBoxService] createBoundingBoxes called');
+    console.log('[BoundingBoxService] extractionResult:', extractionResult);
+    console.log('[BoundingBoxService] pageNumber:', pageNumber);
+    console.log('[BoundingBoxService] canvas dimensions:', { canvasWidth, canvasHeight });
+    console.log('[BoundingBoxService] scale:', scale);
+    
     if (!extractionResult?.analyzeResult?.pages) {
+      console.log('[BoundingBoxService] No pages found in analyzeResult');
       return [];
     }
 
+    console.log('[BoundingBoxService] Available pages:', extractionResult.analyzeResult.pages.map(p => p.pageNumber));
     const page = extractionResult.analyzeResult.pages.find(p => p.pageNumber === pageNumber);
     if (!page) {
+      console.log('[BoundingBoxService] Page not found for pageNumber:', pageNumber);
       return [];
     }
 
+    console.log('[BoundingBoxService] Found page:', page);
+    console.log('[BoundingBoxService] Page structure:');
+    console.log('  - words:', page.words?.length || 0, page.words?.[0]);
+    console.log('  - lines:', page.lines?.length || 0, page.lines?.[0]);
+    console.log('  - page dimensions:', { width: page.width, height: page.height });
+    
     const boundingBoxes: BoundingBox[] = [];
 
     // Process words
     if (page.words) {
+      console.log('[BoundingBoxService] Processing', page.words.length, 'words');
       page.words.forEach((word, index) => {
-        const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
-          word.polygon,
-          page.width,
-          page.height,
-          canvasWidth,
-          canvasHeight,
-          scale
-        );
-
-        boundingBoxes.push({
-          id: `word-${pageNumber}-${index}`,
-          polygon: word.polygon,
+        console.log(`  - word[${index}]:`, {
           content: word.content,
-          confidence: word.confidence,
-          type: BoundingBoxType.WORD,
-          pageNumber,
-          canvasCoordinates
+          polygon: word.polygon,
+          polygonLength: word.polygon?.length,
+          confidence: word.confidence
         });
+        
+        if (!word.polygon || word.polygon.length < 8) {
+          console.log(`    > skipping word[${index}] - invalid polygon:`, word.polygon, 'length:', word.polygon?.length);
+          return;
+        }
+        
+        try {
+          const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
+            word.polygon,
+            page.width,
+            page.height,
+            canvasWidth,
+            canvasHeight,
+            scale
+          );
+          
+          console.log(`    > created canvas coordinates for word[${index}]:`, canvasCoordinates);
+
+          boundingBoxes.push({
+            id: `word-${pageNumber}-${index}`,
+            polygon: word.polygon,
+            content: word.content,
+            confidence: word.confidence,
+            type: BoundingBoxType.WORD,
+            pageNumber,
+            canvasCoordinates
+          });
+        } catch (error) {
+          console.error(`    > error processing word[${index}]:`, error);
+        }
       });
+    } else {
+      console.log('[BoundingBoxService] No words found on page');
     }
 
     // Process lines
     if (page.lines) {
+      console.log('[BoundingBoxService] Processing', page.lines.length, 'lines');
       page.lines.forEach((line, index) => {
-        const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
-          line.polygon,
-          page.width,
-          page.height,
-          canvasWidth,
-          canvasHeight,
-          scale
-        );
-
-        boundingBoxes.push({
-          id: `line-${pageNumber}-${index}`,
-          polygon: line.polygon,
+        console.log(`  - line[${index}]:`, {
           content: line.content,
-          confidence: 1.0, // Lines typically don't have confidence scores
-          type: BoundingBoxType.LINE,
-          pageNumber,
-          canvasCoordinates
+          polygon: line.polygon,
+          polygonLength: line.polygon?.length
         });
+        
+        if (!line.polygon || line.polygon.length < 8) {
+          console.log(`    > skipping line[${index}] - invalid polygon:`, line.polygon, 'length:', line.polygon?.length);
+          return;
+        }
+        
+        try {
+          const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
+            line.polygon,
+            page.width,
+            page.height,
+            canvasWidth,
+            canvasHeight,
+            scale
+          );
+          
+          console.log(`    > created canvas coordinates for line[${index}]:`, canvasCoordinates);
+
+          boundingBoxes.push({
+            id: `line-${pageNumber}-${index}`,
+            polygon: line.polygon,
+            content: line.content,
+            confidence: 1.0, // Lines typically don't have confidence scores
+            type: BoundingBoxType.LINE,
+            pageNumber,
+            canvasCoordinates
+          });
+        } catch (error) {
+          console.error(`    > error processing line[${index}]:`, error);
+        }
       });
+    } else {
+      console.log('[BoundingBoxService] No lines found on page');
     }
 
     // Process tables
     if (extractionResult.analyzeResult.tables) {
+      console.log('[BoundingBoxService] Processing', extractionResult.analyzeResult.tables.length, 'tables');
       extractionResult.analyzeResult.tables.forEach((table, tableIndex) => {
-        table.cells.forEach((cell, cellIndex) => {
-          // Check if cell belongs to current page
-          const cellPage = this.getPageNumberForSpan(cell.spans, extractionResult.analyzeResult);
-          if (cellPage === pageNumber) {
-            const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
-              cell.polygon,
-              page.width,
-              page.height,
-              canvasWidth,
-              canvasHeight,
-              scale
-            );
+        if (table.cells) {
+          table.cells.forEach((cell, cellIndex) => {
+            // Check if cell belongs to current page
+            const cellPage = this.getPageNumberForSpan(cell.spans, extractionResult.analyzeResult);
+            if (cellPage === pageNumber) {
+              console.log(`  - table[${tableIndex}]-cell[${cellIndex}]:`, {
+                content: cell.content,
+                polygon: cell.polygon,
+                polygonLength: cell.polygon?.length
+              });
+              
+              if (!cell.polygon || cell.polygon.length < 8) {
+                console.log(`    > skipping table cell[${tableIndex}-${cellIndex}] - invalid polygon:`, cell.polygon);
+                return;
+              }
+              
+              try {
+                const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
+                  cell.polygon,
+                  page.width,
+                  page.height,
+                  canvasWidth,
+                  canvasHeight,
+                  scale
+                );
 
-            boundingBoxes.push({
-              id: `table-${tableIndex}-cell-${cellIndex}`,
-              polygon: cell.polygon,
-              content: cell.content,
-              confidence: 1.0, // Table cells typically don't have confidence scores
-              type: BoundingBoxType.TABLE_CELL,
-              pageNumber,
-              canvasCoordinates
-            });
-          }
-        });
+                boundingBoxes.push({
+                  id: `table-${tableIndex}-cell-${cellIndex}`,
+                  polygon: cell.polygon,
+                  content: cell.content,
+                  confidence: 1.0, // Table cells typically don't have confidence scores
+                  type: BoundingBoxType.TABLE_CELL,
+                  pageNumber,
+                  canvasCoordinates
+                });
+              } catch (error) {
+                console.error(`    > error processing table cell[${tableIndex}-${cellIndex}]:`, error);
+              }
+            }
+          });
+        }
       });
     }
 
@@ -157,63 +231,18 @@ export class BoundingBoxService {
         if (kvp.key) {
           const keyPage = this.getPageNumberForSpan(kvp.key.spans, extractionResult.analyzeResult);
           if (keyPage === pageNumber) {
-            const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
-              kvp.key.polygon,
-              page.width,
-              page.height,
-              canvasWidth,
-              canvasHeight,
-              scale
-            );
-
-            boundingBoxes.push({
-              id: `kvp-key-${index}`,
-              polygon: kvp.key.polygon,
+            console.log(`  - kvp-key[${index}]:`, {
               content: kvp.key.content,
-              confidence: kvp.confidence,
-              type: BoundingBoxType.KEY_VALUE_PAIR,
-              pageNumber,
-              canvasCoordinates
+              polygon: kvp.key.polygon,
+              polygonLength: kvp.key.polygon?.length
             });
-          }
-        }
-
-        // Process value
-        if (kvp.value) {
-          const valuePage = this.getPageNumberForSpan(kvp.value.spans, extractionResult.analyzeResult);
-          if (valuePage === pageNumber) {
-            const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
-              kvp.value.polygon,
-              page.width,
-              page.height,
-              canvasWidth,
-              canvasHeight,
-              scale
-            );
-
-            boundingBoxes.push({
-              id: `kvp-value-${index}`,
-              polygon: kvp.value.polygon,
-              content: kvp.value.content,
-              confidence: kvp.confidence,
-              type: BoundingBoxType.KEY_VALUE_PAIR,
-              pageNumber,
-              canvasCoordinates
-            });
-          }
-        }
-      });
-    }
-
-    // Process document fields
-    if (extractionResult.analyzeResult.documents) {
-      extractionResult.analyzeResult.documents.forEach((doc, docIndex) => {
-        Object.entries(doc.fields).forEach(([fieldName, fieldValue], fieldIndex) => {
-          if (fieldValue && fieldValue.boundingRegions) {
-            fieldValue.boundingRegions.forEach((region: any, regionIndex: number) => {
-              if (region.pageNumber === pageNumber) {
+            
+            if (!kvp.key.polygon || kvp.key.polygon.length < 8) {
+              console.log(`    > skipping kvp-key[${index}] - invalid polygon:`, kvp.key.polygon);
+            } else {
+              try {
                 const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
-                  region.polygon,
+                  kvp.key.polygon,
                   page.width,
                   page.height,
                   canvasWidth,
@@ -222,21 +251,112 @@ export class BoundingBoxService {
                 );
 
                 boundingBoxes.push({
-                  id: `doc-field-${docIndex}-${fieldName}-${regionIndex}`,
-                  polygon: region.polygon,
-                  content: fieldValue.content || fieldName,
-                  confidence: fieldValue.confidence || 1.0,
-                  type: BoundingBoxType.DOCUMENT_FIELD,
+                  id: `kvp-key-${index}`,
+                  polygon: kvp.key.polygon,
+                  content: kvp.key.content,
+                  confidence: kvp.confidence,
+                  type: BoundingBoxType.KEY_VALUE_PAIR,
                   pageNumber,
                   canvasCoordinates
                 });
+              } catch (error) {
+                console.error(`    > error processing kvp-key[${index}]:`, error);
               }
-            });
+            }
           }
-        });
+        }
+
+        // Process value
+        if (kvp.value) {
+          const valuePage = this.getPageNumberForSpan(kvp.value.spans, extractionResult.analyzeResult);
+          if (valuePage === pageNumber) {
+            console.log(`  - kvp-value[${index}]:`, {
+              content: kvp.value.content,
+              polygon: kvp.value.polygon,
+              polygonLength: kvp.value.polygon?.length
+            });
+            
+            if (!kvp.value.polygon || kvp.value.polygon.length < 8) {
+              console.log(`    > skipping kvp-value[${index}] - invalid polygon:`, kvp.value.polygon);
+            } else {
+              try {
+                const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
+                  kvp.value.polygon,
+                  page.width,
+                  page.height,
+                  canvasWidth,
+                  canvasHeight,
+                  scale
+                );
+
+                boundingBoxes.push({
+                  id: `kvp-value-${index}`,
+                  polygon: kvp.value.polygon,
+                  content: kvp.value.content,
+                  confidence: kvp.confidence,
+                  type: BoundingBoxType.KEY_VALUE_PAIR,
+                  pageNumber,
+                  canvasCoordinates
+                });
+              } catch (error) {
+                console.error(`    > error processing kvp-value[${index}]:`, error);
+              }
+            }
+          }
+        }
       });
     }
 
+    // Process document fields
+    if (extractionResult.analyzeResult.documents) {
+      console.log('[BoundingBoxService] Processing', extractionResult.analyzeResult.documents.length, 'documents');
+      extractionResult.analyzeResult.documents.forEach((doc, docIndex) => {
+        if (doc.fields) {
+          Object.entries(doc.fields).forEach(([fieldName, fieldValue], fieldIndex) => {
+            if (fieldValue && fieldValue.boundingRegions) {
+              fieldValue.boundingRegions.forEach((region: any, regionIndex: number) => {
+                if (region.pageNumber === pageNumber) {
+                  console.log(`  - doc-field[${docIndex}-${fieldName}-${regionIndex}]:`, {
+                    content: fieldValue.content || fieldName,
+                    polygon: region.polygon,
+                    polygonLength: region.polygon?.length
+                  });
+                  
+                  if (!region.polygon || region.polygon.length < 8) {
+                    console.log(`    > skipping doc-field[${docIndex}-${fieldName}-${regionIndex}] - invalid polygon:`, region.polygon);
+                  } else {
+                    try {
+                      const canvasCoordinates = this.convertPolygonToCanvasCoordinates(
+                        region.polygon,
+                        page.width,
+                        page.height,
+                        canvasWidth,
+                        canvasHeight,
+                        scale
+                      );
+
+                      boundingBoxes.push({
+                        id: `doc-field-${docIndex}-${fieldName}-${regionIndex}`,
+                        polygon: region.polygon,
+                        content: fieldValue.content || fieldName,
+                        confidence: fieldValue.confidence || 1.0,
+                        type: BoundingBoxType.DOCUMENT_FIELD,
+                        pageNumber,
+                        canvasCoordinates
+                      });
+                    } catch (error) {
+                      console.error(`    > error processing doc-field[${docIndex}-${fieldName}-${regionIndex}]:`, error);
+                    }
+                  }
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+
+    console.log('[BoundingBoxService] Created bounding boxes:', boundingBoxes.length, boundingBoxes);
     return boundingBoxes;
   }
 
